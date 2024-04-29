@@ -10,86 +10,56 @@ class YahtzeeEnv(gym.Env):
     Attributes
     ----------
     action_space : gym.spaces
-        A dictionary space containing:
+        Contains:
         - 'dice_action': MultiBinary(5), where each bit decides if a corresponding dice should be rerolled.
-        - 'score_action': Discrete(13), selecting which score category to use (0-12).
     observation_space : gym.spaces
-        A dictionary space containing:
+        Contains:
         - 'dice': Box, the current dice values (1-6).
         - 'scorecard': Box, current score for each category (-1 if unscored, 0-50 if scored).
-        - 'potential_scores': Box, potential scores that can be obtained in each category.
         - 'remaining_rolls': Discrete, number of remaining rolls in the current round (0-2).
     dice : ndarray
         Current values of the dice.
     scorecard : ndarray
         Current scores or -1 if a category has not been scored yet.
-    potential_scores : ndarray
-        Potential scores for each category based on the current dice.
     rounds_left : int
         Number of rounds left in the game.
     rolls_this_round : int
         Number of rolls taken in the current round.
-
-    Methods
-    -------
-    reset(seed=None, options=None)
-        Resets the environment to the initial state and returns the initial observation.
-    step(action)
-        Executes a given action and returns the new state, reward, done, and info.
-    render(mode='human')
-        Renders the current state of the environment.
-    close()
-        Performs any necessary cleanup.
     """
 
     metadata = {"render_modes": ["human", "ansi"]}
 
     def __init__(self):
-        """Initializes a new Yahtzee game environment."""
         super(YahtzeeEnv, self).__init__()
-        self.action_space = gym.spaces.Dict(
-            {
-                "dice_action": gym.spaces.MultiBinary(5),
-                "score_action": gym.spaces.Discrete(13),
-            }
-        )
+        self.action_space = gym.spaces.MultiBinary(5)
 
         self.observation_space = gym.spaces.Dict(
             {
                 "dice": gym.spaces.Box(low=1, high=6, shape=(5,), dtype=int),
-                "scorecard": gym.spaces.Box(low=-1, high=50, shape=(13,), dtype=int),
-                "potential_scores": gym.spaces.Box(
-                    low=0, high=50, shape=(13,), dtype=int
-                ),
+                "scored_categories": gym.spaces.MultiBinary(13),
                 "remaining_rolls": gym.spaces.Discrete(3),
             }
         )
 
         self.dice = None
-        self.scorecard = None
+        self.scored_categories = None
+        self.actual_scores = None
         self.potential_scores = None
         self.rounds_left = 13
         self.rolls_this_round = 0
 
-    def reset(self, seed=None, options=None):
+    def reset(self):
         """
         Resets the environment to its initial state.
-
-        Parameters
-        ----------
-        seed : int, optional
-            Seed for the random number generator.
-        options : dict, optional
-            Additional options for resetting the environment (unused).
 
         Returns
         -------
         tuple
             Initial observation of the environment and an empty info dictionary.
         """
-        super().reset(seed=seed)
         self.dice = np.random.randint(1, 7, size=(5,))
-        self.scorecard = np.full(13, -1, dtype=int)
+        self.scored_categories = np.zeros(13, dtype=int)
+        self.actual_scores = np.full(13, -1, dtype=int)
         self.potential_scores = np.zeros(13, dtype=int)
         self.rounds_left = 13
         self.rolls_this_round = 0
@@ -97,118 +67,81 @@ class YahtzeeEnv(gym.Env):
         return self.observation(), {}
 
     def step(self, action):
-        """
-        Execute the given action in the environment.
-
-        Parameters
-        ----------
-        action : dict
-            Contains 'dice_action' which is a MultiBinary(5) for dice rerolls and
-            'score_action' which is a Discrete(13) to select a scoring category.
-
-        Returns
-        -------
-        tuple
-            Observations, reward, done (boolean), truncated (boolean), and info (dict).
-        """
-        # print("Action:", action)
-        dice_action = action["dice_action"]
-        score_action = action["score_action"]
         assert self.action_space.contains(action), "Invalid action"
 
-        if self.rolls_this_round < 2 and any(dice_action):
-            self.reroll_dice(dice_action)
+        if self.rolls_this_round < 2 and any(action):
+            self.reroll_dice(action)
             self.rolls_this_round += 1
             self.update_potential_scores()
             return self.observation(), 0, False, False, {}
 
-        # Enforce valid action, penalty inherent in suboptimal choice
-        if score_action != -1 and self.scorecard[score_action] != -1:
-            score_action = self.find_first_unscored_category()
-
+        score_action = self.select_highest_scoring_category()
         reward = self.score_category(score_action)
-        if reward == 0:  # Punish taking a zero
-            reward -= 10
         self.rounds_left -= 1
         terminated = self.rounds_left == 0
-        truncated = False
-
         self.dice = np.random.randint(1, 7, size=(5,))
         self.rolls_this_round = 0
         self.update_potential_scores()
-
-        return self.observation(), reward, terminated, truncated, {}
-
-    def find_first_unscored_category(self):
-        """
-        Finds the first category in the scorecard that has not been scored yet.
-        This is an indirect penalty to enforce that the agent selects a valid scoring action.
-
-        Returns
-        -------
-        int
-            The index of the first unscored category in the scorecard, or -1 if all categories have been scored.
-        """
-        for i in range(13):
-            if self.scorecard[i] == -1:
-                return i
-        return -1
+        return self.observation(), reward, terminated, False, {}
 
     def observation(self):
-        """
-        Constructs the current observation of the environment.
-
-        Returns
-        -------
-        dict
-            A dictionary containing:
-            - 'dice': array of current dice values.
-            - 'scorecard': current score status for each category.
-            - 'potential_scores': potential score for each category based on current dice.
-            - 'remaining_rolls': number of remaining rolls in this turn.
-        """
         return {
             "dice": self.dice,
-            "scorecard": self.scorecard,
-            "potential_scores": self.potential_scores,
+            "scored_categories": self.scored_categories,
             "remaining_rolls": 3 - self.rolls_this_round,
         }
 
     def reroll_dice(self, dice_action):
-        """
-        Rerolls the dice specified by the dice_action.
-
-        Parameters
-        ----------
-        dice_action : ndarray
-            An array indicating which dice to reroll (1 to reroll, 0 to keep).
-        """
         for i in range(5):
-            if dice_action[i] == 1:
+            if dice_action[i]:
                 self.dice[i] = np.random.randint(1, 7)
 
     def score_category(self, category):
-        """
-        Scores the specified category if it is unscored.
+        if self.scored_categories[category] == 0:
+            score = self.potential_scores[category]
+            self.actual_scores[category] = score
+            self.scored_categories[category] = 1
+            return score
+        return -10
 
-        Parameters
-        ----------
-        category : int
-            The category index to score.
+    def select_highest_scoring_category(self):
+        valid_scores = [
+            score if not scored else -1
+            for score, scored in zip(self.potential_scores, self.scored_categories)
+        ]
+        return np.argmax(valid_scores)
 
-        Returns
-        -------
-        int
-            The score for the selected category, or a penalty for invalid selection.
-        """
-        if self.scorecard[category] == -1:
-            self.scorecard[category] = self.potential_scores[category]
-            reward = self.potential_scores[category]
-            self.potential_scores[category] = 0
-            return reward
-        return (
-            0  # Potentially penalize invalid choice rather than enforce valid choice...
-        )
+    def update_potential_scores(self):
+        counts = np.bincount(self.dice, minlength=7)[
+            1:
+        ]  # Count occurrences of each die face
+        for i in range(6):  # Upper section scoring
+            if self.scored_categories[i] == 0:
+                self.potential_scores[i] = (i + 1) * counts[i]
+        # Scoring for combinations
+        self.potential_scores[6] = (
+            np.sum(self.dice) if np.max(counts) >= 3 else 0
+        )  # Three of a kind
+        self.potential_scores[7] = (
+            np.sum(self.dice) if np.max(counts) >= 4 else 0
+        )  # Four of a kind
+        self.potential_scores[8] = (
+            25 if np.any(counts == 3) and np.any(counts == 2) else 0
+        )  # Full House
+        self.potential_scores[9] = (
+            30 if self.check_straight(counts, 4) else 0
+        )  # Small Straight
+        self.potential_scores[10] = (
+            40 if self.check_straight(counts, 5) else 0
+        )  # Large Straight
+        self.potential_scores[11] = 50 if np.max(counts) == 5 else 0  # Yahtzee
+        self.potential_scores[12] = np.sum(self.dice)  # Chance
+
+    def check_straight(self, counts, length):
+        for i in range(1, 7 - length + 1):
+            if all(counts[i : i + length]):
+                return True
+        return False
 
     def render(self, mode="human"):
         """
@@ -227,63 +160,9 @@ class YahtzeeEnv(gym.Env):
         if mode == "human":
             print("Dice: ", self.dice)
             print("Scorecard: ", self.scorecard)
-            print("Potential Scores:", self.potential_scores)
             print("Rolls left this round: ", 3 - self.rolls_this_round)
         elif mode == "ansi":
             return f"Dice: {self.dice} \nScorecard: {self.scorecard} \nRolls left this round: {3 - self.rolls_this_round}"
-
-    def update_potential_scores(self):
-        """Updates the potential scores for each category based on the current dice configuration."""
-        counts = np.bincount(self.dice, minlength=7)[
-            1:
-        ]  # Count occurrences of each die face
-
-        # Upper Section: Ones to Sixes
-        for i in range(6):
-            if self.scorecard[i] == -1:  # Check if not scored
-                self.potential_scores[i] = (i + 1) * counts[i]
-
-        # Three of a Kind
-        self.potential_scores[6] = (
-            np.sum(self.dice) if np.max(counts) >= 3 and self.scorecard[6] == -1 else 0
-        )
-
-        # Four of a Kind
-        self.potential_scores[7] = (
-            np.sum(self.dice) if np.max(counts) >= 4 and self.scorecard[7] == -1 else 0
-        )
-
-        # Full House
-        self.potential_scores[8] = (
-            25
-            if (np.any(counts == 3) and np.any(counts == 2)) and self.scorecard[8] == -1
-            else 0
-        )
-
-        # Small Straight
-        self.potential_scores[9] = (
-            30 if self.check_straight(counts, 4) and self.scorecard[9] == -1 else 0
-        )
-
-        # Large Straight
-        self.potential_scores[10] = (
-            40 if self.check_straight(counts, 5) and self.scorecard[10] == -1 else 0
-        )
-
-        # Yahtzee
-        self.potential_scores[11] = (
-            50 if np.max(counts) == 5 and self.scorecard[11] == -1 else 0
-        )
-
-        # Chance
-        self.potential_scores[12] = np.sum(self.dice) if self.scorecard[12] == -1 else 0
-
-    def check_straight(self, counts, length):
-        """Helper function to check if there's a straight of a given length."""
-        for i in range(1, 7 - length + 1):
-            if all(counts[i : i + length] > 0):
-                return True
-        return False
 
     def render_scorecard(self):
         """Renders the scorecard in a tabular format to the console."""
@@ -306,7 +185,9 @@ class YahtzeeEnv(gym.Env):
         print("| Category          | Score |")
         print("+-------------------+-------+")
         for i, title in enumerate(titles):
-            score_display = "-" if self.scorecard[i] == -1 else str(self.scorecard[i])
+            score_display = (
+                "-" if self.actual_scores[i] == -1 else str(self.actual_scores[i])
+            )
             print(f"| {title:<17} | {score_display:<5} |")
         print("+-------------------+-------+")
 
@@ -319,7 +200,7 @@ class YahtzeeEnv(gym.Env):
         int
             The total score calculated from the scorecard.
         """
-        total_score = sum(self.scorecard)
+        total_score = sum(self.actual_scores)
         return total_score
 
     def close(self):
