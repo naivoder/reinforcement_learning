@@ -1,11 +1,10 @@
-from yahtzee import YahtzeeEnv, plot_scores
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 from collections import deque
 import random
-from itertools import count
+from yahtzee import YahtzeeEnv, plot_scores
 
 
 class DQN(nn.Module):
@@ -18,7 +17,7 @@ class DQN(nn.Module):
             nn.Linear(128, 128),
             nn.LeakyReLU(),
             nn.Dropout(p=0.2),
-            nn.Linear(128, 18),  # 5 for dice_action + 13 for score_action
+            nn.Linear(128, 5),  # Output only for dice actions
         )
 
     def forward(self, x):
@@ -57,28 +56,10 @@ class Agent:
         if random.random() > epsilon:
             with torch.no_grad():
                 q_values = self.model(state_tensor)
-                dice_action = torch.sigmoid(q_values[:, :5]) > 0.5
-                score_action = q_values[:, 5:].max(1)[1].item()
-                action = {
-                    "dice_action": dice_action.numpy().astype(int)[0],
-                    "score_action": score_action,
-                }
+                dice_action = (torch.sigmoid(q_values) > 0.5).int().squeeze().tolist()
         else:
-            action = {
-                "dice_action": np.random.choice([0, 1], size=5),
-                "score_action": np.random.choice(range(13)),
-            }
-        return action
-
-    def prepare_state_tensor(self, state):
-        dice = torch.tensor(state["dice"], dtype=torch.float32)
-        scorecard = torch.tensor(state["scorecard"], dtype=torch.float32)
-        potential_scores = torch.tensor(state["potential_scores"], dtype=torch.float32)
-        remaining_rolls = torch.tensor([state["remaining_rolls"]], dtype=torch.float32)
-        state_tensor = torch.cat(
-            (dice, scorecard, potential_scores, remaining_rolls), dim=0
-        ).unsqueeze(0)
-        return state_tensor
+            dice_action = np.random.choice([0, 1], size=5).tolist()
+        return dice_action
 
     def optimize_model(self):
         if len(self.memory) < self.batch_size:
@@ -89,53 +70,53 @@ class Agent:
         state_batch = torch.stack(
             [self.prepare_state_tensor(state).to(self.device) for state in batch[0]]
         ).squeeze(1)
-        dice_action_batch = torch.tensor(
-            np.array([action["dice_action"] for action in batch[1]], dtype=np.float32),
-            device=self.device,
+        # print("State Batch:", state_batch.shape)
+
+        action_batch = torch.stack(
+            [
+                torch.tensor(action, dtype=torch.float32, device=self.device)
+                for action in batch[1]
+            ]
         )
-        score_action_batch = torch.tensor(
-            [action["score_action"] for action in batch[1]],
-            dtype=torch.int64,
-            device=self.device,
-        )
+        # print("Action Batch:", action_batch.shape)
 
         reward_batch = torch.tensor(batch[2], dtype=torch.float32, device=self.device)
+        # print("Reward Batch:", reward_batch.shape)
+
         next_state_batch = torch.stack(
-            [
-                self.prepare_state_tensor(state).to(self.device)
-                for state in batch[3]
-                if state is not None
-            ]
+            [self.prepare_state_tensor(state).to(self.device) for state in batch[3]]
         ).squeeze(1)
-        non_final_mask = torch.tensor(
-            [s is not None for s in batch[3]], dtype=torch.bool, device=self.device
-        )
+        # print("Next State Batch:", next_state_batch.shape)
 
         state_action_values = self.model(state_batch)
-        dice_values = torch.sum(dice_action_batch * state_action_values[:, :5], dim=1)
-        score_values = (
-            state_action_values[:, 5:]
-            .gather(1, score_action_batch.unsqueeze(-1))
-            .squeeze(-1)
-        )
-        combined_q_values = dice_values + score_values
+        # print("State Action Values:", state_action_values.shape)
+
+        action_values = torch.sum(state_action_values * action_batch, dim=1)
+        # print("Action Values:", action_values)
 
         next_state_values = torch.zeros(self.batch_size, device=self.device)
-        if len(next_state_batch) > 0:
-            next_state_values[non_final_mask] = (
-                self.target_model(next_state_batch).max(1)[0].detach()
-            )
+        if next_state_batch.size(0) > 0:
+            next_state_q_values = self.target_model(next_state_batch)
+            max_next_state_values = next_state_q_values.max(1)[0].detach()
+            if max_next_state_values.dim() > 1:
+                max_next_state_values = max_next_state_values.squeeze()
+            next_state_values[: max_next_state_values.size(0)] = max_next_state_values
 
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
-        loss = nn.SmoothL1Loss()(
-            combined_q_values.unsqueeze(-1), expected_state_action_values.unsqueeze(-1)
-        )
+
+        loss = nn.SmoothL1Loss()(action_values, expected_state_action_values)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
+    def prepare_state_tensor(self, state):
+        dice = torch.tensor(state["dice"], dtype=torch.float32)
+        scorecard = torch.tensor(state["scored_categories"], dtype=torch.float32)
+        remaining_rolls = torch.tensor([state["remaining_rolls"]], dtype=torch.float32)
+        state_tensor = torch.cat((dice, scorecard, remaining_rolls), dim=0).unsqueeze(0)
+        return state_tensor
+
     def update_target_network(self):
-        """Updates the target network with the current weights of the model."""
         self.target_model.load_state_dict(self.model.state_dict())
 
 
@@ -167,46 +148,44 @@ def calculate_epsilon(
 if __name__ == "__main__":
     env = YahtzeeEnv()
     agent = Agent(
-        32,
+        19,
         memory_size=10000,
         batch_size=128,
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
 
     scores = []
-    num_episodes = 500000
+    num_episodes = 50000
     epsilon = 1
     min_epsilon = 0.01
     running_avg = 0
-    half_life = num_episodes // 2
+    eps_decay = 0.9999
 
     for i_episode in range(num_episodes):
         print(
-            f"Playing Episode: {i_episode} of {num_episodes}\t Running Avg: {running_avg}",
+            f"Playing Episode: {i_episode} of {num_episodes}\t Running Avg: {running_avg}\t Epsilon: {epsilon:.4f}",
             end="\r",
         )
         state, _ = env.reset()
         done = False
 
-        score = 0
         while not done:
             action = agent.select_action(state, epsilon)
             next_state, reward, done, _, _ = env.step(action)
             agent.memory.push(state, action, reward, next_state, done)
             state = next_state
-            score += reward
 
         agent.optimize_model()
+        scores.append(env.get_total_score())
 
-        scores.append(score)
-
-        epsilon = calculate_epsilon(i_episode, half_life)
+        if epsilon > 0.01:
+            epsilon = max(0.01, epsilon * eps_decay)
 
         if i_episode != 0 and i_episode % 100 == 0:
             running_avg = np.mean(scores[-100:])
             agent.update_target_network()
 
-        print(" " * 50, end="\r")
+        print(" " * 1000, end="\r")
 
     print(f"Episode {i_episode}: Total reward: {env.get_total_score()}")
     env.render_scorecard()

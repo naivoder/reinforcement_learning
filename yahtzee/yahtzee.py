@@ -5,58 +5,37 @@ import matplotlib.pyplot as plt
 
 class YahtzeeEnv(gym.Env):
     """
-    A custom environment for playing Yahtzee, compatible with the OpenAI Gym framework.
-
-    Attributes
-    ----------
-    action_space : gym.spaces
-        Contains:
-        - 'dice_action': MultiBinary(5), where each bit decides if a corresponding dice should be rerolled.
-    observation_space : gym.spaces
-        Contains:
-        - 'dice': Box, the current dice values (1-6).
-        - 'scorecard': Box, current score for each category (-1 if unscored, 0-50 if scored).
-        - 'remaining_rolls': Discrete, number of remaining rolls in the current round (0-2).
-    dice : ndarray
-        Current values of the dice.
-    scorecard : ndarray
-        Current scores or -1 if a category has not been scored yet.
-    rounds_left : int
-        Number of rounds left in the game.
-    rolls_this_round : int
-        Number of rolls taken in the current round.
+    A custom environment for playing Yahtzee, streamlined for simpler state representation.
     """
 
     metadata = {"render_modes": ["human", "ansi"]}
 
     def __init__(self):
         super(YahtzeeEnv, self).__init__()
-        self.action_space = gym.spaces.MultiBinary(5)
+        self.action_space = gym.spaces.MultiBinary(
+            5
+        )  # Actions for re-rolling dice remain the same
 
+        # Updated observation space
         self.observation_space = gym.spaces.Dict(
             {
                 "dice": gym.spaces.Box(low=1, high=6, shape=(5,), dtype=int),
+                "potential_scores": gym.spaces.Box(
+                    low=0, high=50, shape=(13,), dtype=int
+                ),
                 "scored_categories": gym.spaces.MultiBinary(13),
                 "remaining_rolls": gym.spaces.Discrete(3),
             }
         )
 
-        self.dice = None
-        self.scored_categories = None
-        self.actual_scores = None
-        self.potential_scores = None
+        self.dice = np.random.randint(1, 7, size=(5,))
+        self.scored_categories = np.zeros(13, dtype=int)
+        self.actual_scores = np.full(13, -1, dtype=int)
+        self.potential_scores = np.zeros(13, dtype=int)
         self.rounds_left = 13
         self.rolls_this_round = 0
 
     def reset(self):
-        """
-        Resets the environment to its initial state.
-
-        Returns
-        -------
-        tuple
-            Initial observation of the environment and an empty info dictionary.
-        """
         self.dice = np.random.randint(1, 7, size=(5,))
         self.scored_categories = np.zeros(13, dtype=int)
         self.actual_scores = np.full(13, -1, dtype=int)
@@ -68,25 +47,27 @@ class YahtzeeEnv(gym.Env):
 
     def step(self, action):
         assert self.action_space.contains(action), "Invalid action"
-
         if self.rolls_this_round < 2 and any(action):
             self.reroll_dice(action)
             self.rolls_this_round += 1
             self.update_potential_scores()
-            return self.observation(), 0, False, False, {}
+            reward = 0
+        else:
+            current_score = self.get_total_score()
+            score_action = self.select_highest_scoring_category()
+            self.score_category(score_action)
+            reward = self.get_total_score() - current_score
+            self.rounds_left -= 1
+            self.dice = np.random.randint(1, 7, size=(5,))
+            self.rolls_this_round = 0
+            self.update_potential_scores()
 
-        score_action = self.select_highest_scoring_category()
-        reward = self.score_category(score_action)
-        self.rounds_left -= 1
-        terminated = self.rounds_left == 0
-        self.dice = np.random.randint(1, 7, size=(5,))
-        self.rolls_this_round = 0
-        self.update_potential_scores()
-        return self.observation(), reward, terminated, False, {}
+        return self.observation(), reward, self.rounds_left == 0, False, {}
 
     def observation(self):
         return {
             "dice": self.dice,
+            "potential_scores": self.potential_scores,
             "scored_categories": self.scored_categories,
             "remaining_rolls": 3 - self.rolls_this_round,
         }
@@ -101,8 +82,6 @@ class YahtzeeEnv(gym.Env):
             score = self.potential_scores[category]
             self.actual_scores[category] = score
             self.scored_categories[category] = 1
-            return score
-        return -10
 
     def select_highest_scoring_category(self):
         valid_scores = [
@@ -200,7 +179,19 @@ class YahtzeeEnv(gym.Env):
         int
             The total score calculated from the scorecard.
         """
-        total_score = sum(self.actual_scores)
+        # Replace all -1 with 0 in the scoring
+        adjusted_scores = [max(0, score) for score in self.actual_scores]
+
+        # Calculate the upper section sum (assuming the first six categories are ones to sixes)
+        upper_section_sum = sum(adjusted_scores[:6])
+
+        # Calculate the total score including the upper section and other categories
+        total_score = sum(adjusted_scores)
+
+        # Check if the upper section sum is at least 63 and add a 35-point bonus if it is
+        if upper_section_sum >= 63:
+            total_score += 35
+
         return total_score
 
     def close(self):
