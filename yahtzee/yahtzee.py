@@ -207,8 +207,8 @@ class YahtzeeEnv(gym.Env):
             self.potential_scores[category] = 0
             return reward
         return (
-            -10
-        )  # Potentially penalize invalid choice rather than enforce valid choice...
+            0  # Potentially penalize invalid choice rather than enforce valid choice...
+        )
 
     def render(self, mode="human"):
         """
