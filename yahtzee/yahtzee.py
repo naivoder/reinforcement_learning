@@ -1,21 +1,3 @@
-"""
-state space: 
-- five dice values
-    - [a, b, c, d, e]
-- roll (N of 3)
-- current scorecard 
-    - [1, 2, 3, 4, 5, 6, 3ok, 4ok, FH, SS, LS, Y, B, Y*]
-- current score (total)
-
-action space: 
-- roll dice 
-    - [a, b, c, d, e]
-- score category
-
-reward:
-- points scored 
-"""
-
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
