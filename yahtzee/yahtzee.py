@@ -139,6 +139,7 @@ class YahtzeeEnv(gym.Env):
     def find_first_unscored_category(self):
         """
         Finds the first category in the scorecard that has not been scored yet.
+        This is an indirect penalty to enforce that the agent selects a valid scoring action.
 
         Returns
         -------
