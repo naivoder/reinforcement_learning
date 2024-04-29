@@ -111,6 +111,7 @@ class YahtzeeEnv(gym.Env):
         tuple
             Observations, reward, done (boolean), truncated (boolean), and info (dict).
         """
+        # print("Action:", action)
         dice_action = action["dice_action"]
         score_action = action["score_action"]
         assert self.action_space.contains(action), "Invalid action"
@@ -126,6 +127,8 @@ class YahtzeeEnv(gym.Env):
             score_action = self.find_first_unscored_category()
 
         reward = self.score_category(score_action)
+        if reward == 0:  # Punish taking a zero
+            reward -= 10
         self.rounds_left -= 1
         terminated = self.rounds_left == 0
         truncated = False
@@ -304,7 +307,7 @@ class YahtzeeEnv(gym.Env):
         print("+-------------------+-------+")
         for i, title in enumerate(titles):
             score_display = "-" if self.scorecard[i] == -1 else str(self.scorecard[i])
-            print(f"| {title:<16} | {score_display:<5} |")
+            print(f"| {title:<17} | {score_display:<5} |")
         print("+-------------------+-------+")
 
     def get_total_score(self):
@@ -317,7 +320,6 @@ class YahtzeeEnv(gym.Env):
             The total score calculated from the scorecard.
         """
         total_score = sum(self.scorecard)
-        print("Total Score:", total_score)
         return total_score
 
     def close(self):
