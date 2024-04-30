@@ -20,3 +20,7 @@ class LanderNN(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+if __name__ == "__main__":
+    model = LanderNN(input_dims=(8), n_actions=4, lr=0.0005)

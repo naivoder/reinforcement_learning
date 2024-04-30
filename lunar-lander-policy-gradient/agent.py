@@ -38,3 +38,30 @@ class Agent:
 
     def store_rewards(self, reward):
         self.reward_memory.append(reward)
+
+    def learn(self):
+        self.policy.optimizer.zero_grad()
+        Gt = np.zeros_like(self.reward_memory, dtype=np.float64)
+
+        for i in range(len(self.reward_memory)):
+            G_sum = 0
+            discount = 1
+            for j in range(i, len(self.reward_memory)):
+                G_sum += discount * self.reward_memory[j]
+                discount *= self.gamma
+            Gt[i] = G_sum
+
+        Gt = torch.Tensor(Gt).to(self.policy.device)
+
+        loss = 0
+        for g, logprob in zip(Gt, self.action_memory):
+            loss += -g * logprob
+        loss.backwards()
+        self.policy.optimizer.step()
+
+        self.reward_memory = []
+        self.action_memory = []
+
+
+if __name__ == "__main__":
+    agent = Agent(0.0005, (8))
