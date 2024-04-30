@@ -6,7 +6,7 @@ install:
     @for dir in $$(find . -mindepth 1 -maxdepth 1 -type d); do \
         if [ -f $$dir/requirements.txt ]; then \
             echo "Installing dependencies in $$dir"; \
-            pip install --upgrade pip pytest pylint black && \
+            pip install --upgrade pip && \
             pip install -r $$dir/requirements.txt; \
         fi \
     done
