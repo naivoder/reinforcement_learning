@@ -14,4 +14,3 @@ jobs:
       - name: Install dependencies, lint and test
         run: |
           make
-
