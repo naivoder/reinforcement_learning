@@ -31,9 +31,9 @@ jobs:
           make format
 
       - name: Lint with Pylint
-        uses: kgpl/gh-pylint@v1
+        uses: Silleellie/pylint-github-action@v2
         with:
-          package-path: .
+          lint-path: .
           python-version: 3.10
 
       - name: Test with Pytest
