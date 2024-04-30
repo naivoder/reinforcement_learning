@@ -20,6 +20,6 @@ test:
 	@for dir in $$(find . -mindepth 1 -maxdepth 1 -type d); do \
 		if [ -f $$dir/test_*.py ] || [ -f $$dir/*_test.py ]; then \
 			echo "Running tests in $$dir"; \
-			(cd $$dir && python -m pytest -vv --cov=.); \
+			(cd $$dir && python -m pytest -vv .); \
 		fi \
 	done

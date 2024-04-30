@@ -1,5 +1,8 @@
 # Reinforcement Learning Algorithms
 
+[![CI/CD Pipeline](https://github.com/naivoder/reinforcement_learning/actions/workflows/cicd.yml/badge.svg)](https://github.com/naivoder/reinforcement_learning/actions/workflows/cicd.yml)  
+![Code style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)
+
 This repository contains Python implementations of various reinforcement learning algorithms, each designed to tackle a range of different environments and problems. These implementations serve as a practical introduction to the field of reinforcement learning and are suitable for educational purposes, research, and development of more complex algorithms.
 
 ## Prerequisites
