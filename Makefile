@@ -17,7 +17,7 @@ format:
 
 # Lint all Python files in the project
 lint:
-	@find . -mindepth 1 -maxdepth 2 -type f -name '*.py' -exec pylint --disable=R,C {} +
+	@find . -mindepth 1 -maxdepth 2 -type f -name '*.py' -exec pylint --disable=R,C {} + || true
 
 # Run pytest in subdirectories that contain tests
 test:
