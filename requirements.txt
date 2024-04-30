@@ -4,3 +4,4 @@ numpy
 gymnasium
 pylint
 pytest
+black

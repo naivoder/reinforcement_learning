@@ -1,5 +1,0 @@
-matplotlib
-numpy
-gymnasium
-pylint
-pytest

@@ -1,15 +1,11 @@
 # Define the shell used by make
 SHELL := /bin/bash
 
-# Install command to handle multiple requirements.txt in subdirectories
+# Install dependencies
 install:
-	@for dir in $$(find . -mindepth 1 -maxdepth 1 -type d); do \
-		if [ -f $$dir/requirements.txt ]; then \
-			echo "Installing dependencies in $$dir"; \
-			pip install --upgrade pip pytest pylint black && \
-			pip install -r $$dir/requirements.txt; \
-		fi \
-	done
+	@echo "Installing dependencies from the root requirements.txt"
+	@pip install --upgrade pip
+	@pip install -r requirements.txt
 
 # Format all Python files using black
 format:
