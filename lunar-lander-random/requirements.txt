@@ -1,1 +1,3 @@
 gymnasium
+pylint
+pytest
