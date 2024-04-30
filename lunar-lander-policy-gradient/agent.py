@@ -1,7 +1,7 @@
 from model import LanderNN
 import numpy as np
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 
 
 class Agent:
@@ -20,8 +20,8 @@ class Agent:
 
     def choose_action(self, state):
         # need to add batch dimension to state so pytorch doesn't freak out
-        state = torch.Tensor([state]).to(self.policy.device)
-        probs = F.softmax(self.policy(state))
+        state = torch.Tensor(np.array(state)).to(self.policy.device)
+        probs = F.softmax(self.policy(state), dim=-1)
 
         # build distribution over probabilities
         action_probs = torch.distributions.Categorical(probs)
@@ -56,7 +56,7 @@ class Agent:
         loss = 0
         for g, logprob in zip(Gt, self.action_memory):
             loss += -g * logprob
-        loss.backwards()
+        loss.backward()
         self.policy.optimizer.step()
 
         self.reward_memory = []

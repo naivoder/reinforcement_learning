@@ -5,7 +5,7 @@ from torch import nn
 class LanderNN(nn.Module):
     def __init__(self, input_dims, n_actions, lr):
         super(LanderNN, self).__init__()
-        self.device = "cuda" if torch.gpu.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.input_dims = input_dims
         self.n_actions = n_actions
         self.lr = lr
