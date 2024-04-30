@@ -8,10 +8,12 @@ class Agent:
     def __init__(self, lr, input_dims, n_actions=4, gamma=0.99):
         self.lr = lr
         self.input_dims = input_dims
-        self.n_actions = 4
-        self.gamma = 0.99
+        self.n_actions = n_actions
+        self.gamma = gamma
+
         self.reward_memory = []
         self.action_memory = []
+
         self.policy = LanderNN(
             input_dims=self.input_dims, n_actions=self.n_actions, lr=self.lr
         )
