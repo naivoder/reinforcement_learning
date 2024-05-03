@@ -158,6 +158,7 @@ class ActorCritic:
         _, this_value = self.policy_net(state)
         _, next_value = self.policy_net(next_state)
 
+        # multiply next state value * (1-done) to account for terminal conditions
         delta = reward + self.gamma * (next_value * (1 - int(done))) - this_value
         actor_loss = -self.log_prob * delta
         critic_loss = delta**2
@@ -189,7 +190,7 @@ if __name__ == "__main__":
 
         scores.append(score)
         print(" " * 64, end="\r")
-        if i % 10 == 0:
+        if i + 1 % 10 == 0:
             avg_score = np.mean(scores[-10:])
 
     plot_running_avg(scores)
