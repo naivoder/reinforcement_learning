@@ -42,11 +42,11 @@ class PolicyNetwork(torch.nn.Module):
         self.input_shape = input_shape
         self.n_actions = n_actions
         self.lr = learning_rate
-        self.input = torch.nn.Linear(*self.input_shape, 2000)
+        self.input = torch.nn.Linear(*self.input_shape, 2048)
         self.activation = torch.nn.ReLU()
-        self.hidden = torch.nn.Linear(2000, 1500)
-        self.actor_out = torch.nn.Linear(1500, self.n_actions)
-        self.critic_out = torch.nn.Linear(1500, 1)
+        self.hidden = torch.nn.Linear(2048, 2048)
+        self.actor_out = torch.nn.Linear(2048, self.n_actions)
+        self.critic_out = torch.nn.Linear(2048, 1)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
     def forward(self, x):
@@ -194,3 +194,4 @@ if __name__ == "__main__":
             avg_score = np.mean(scores[-10:])
 
     plot_running_avg(scores)
+    print(f"Max Score: {max(scores)}")

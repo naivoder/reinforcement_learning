@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: job
+spec:
+  location: /Users/naivoder/Code/rl/lunar-lander-actor-critic/
+  project: None
+  name: ll-actor-critic
+  entrypoint: "python {{path}}/main.py"
+  gpu: 1
+  image: registry.gitlab.com/r-dex-systems/containers/pytorch:gym
