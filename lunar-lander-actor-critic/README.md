@@ -1,0 +1,3 @@
+# Actor-Critic Agents
+
+This repository features an implementation of the Actor-Critic reinforcement learning method, tailored specifically for the Lunar Lander environment. This approach employs a neural network that concurrently estimates both policy and value functions based on the state of the lander. This dual mechanism allows the agent to intelligently determine the optimal actions required to safely land the spacecraft on the moon's surface, marked by two flags. By leveraging the Actor-Critic algorithm, the agent learns through an iterative process, refining its strategies by adjusting both the policy and value estimates to maximize the expected returns from its actions.
