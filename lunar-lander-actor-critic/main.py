@@ -47,7 +47,7 @@ class PolicyNetwork(torch.nn.Module):
         self.hidden = torch.nn.Linear(2000, 1500)
         self.actor_out = torch.nn.Linear(1500, self.n_actions)
         self.critic_out = torch.nn.Linear(1500, 1)
-        self.optimizer = torch.optim.Adam(self.parameters())
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
     def forward(self, x):
         """
@@ -152,8 +152,8 @@ class ActorCritic:
         self.policy_net.optimizer.zero_grad()
 
         state = torch.Tensor(np.array(state)).to(self.device)
-        reward = torch.Tensor(np.array(reward)).to(self.device)
         next_state = torch.Tensor(np.array(next_state)).to(self.device)
+        reward = torch.Tensor([reward]).to(self.device)
 
         _, this_value = self.policy_net(state)
         _, next_value = self.policy_net(next_state)
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     avg_score = 0
     scores = []
     for i in range(n_episodes):
-        print(f"Playing episode: {i+1}\t Avg Score: {avg_score}", end="\r")
+        print(f" Playing episode: {i+1}\t Avg Score: {avg_score:.4f}", end="\r")
         state, info = env.reset()
         score = 0
 
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
         scores.append(score)
         print(" " * 64, end="\r")
-        if i % 100 == 0:
-            avg_score = np.mean(scores[-100:])
+        if i % 10 == 0:
+            avg_score = np.mean(scores[-10:])
 
     plot_running_avg(scores)
