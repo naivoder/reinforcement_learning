@@ -38,21 +38,21 @@ class CriticNetwork(torch.nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        torch.nn.init.uniform_(
-            self.h1_layer.weight,
-            -1 / np.sqrt(*self.input_shape),
-            1 / np.sqrt(*self.input_shape),
-        )
-        torch.nn.init.uniform_(
-            self.h2_layer.weight,
-            -1 / np.sqrt(self.h1_size),
-            1 / np.sqrt(self.h1_size),
-        )
-        torch.nn.init.uniform_(
-            self.out_layer.weight,
-            -3e-3,
-            3e-3,
-        )
+        f1 = 1.0 / np.sqrt(self.h1_layer.weight.data.size()[0])
+        self.h1_layer.weight.data.uniform_(-f1, f1)
+        self.h1_layer.bias.data.uniform_(-f1, f1)
+
+        f2 = 1.0 / np.sqrt(self.h2_layer.weight.data.size()[0])
+        self.h2_layer.weight.data.uniform_(-f2, f2)
+        self.h2_layer.bias.data.uniform_(-f2, f2)
+
+        fact = 1.0 / np.sqrt(self.action_vals.weight.data.size()[0])
+        self.action_vals.weight.data.uniform_(-fact, fact)
+        self.action_vals.bias.data.uniform_(-fact, fact)
+
+        fout = 3e-3
+        self.out_layer.weight.data.uniform_(-fout, fout)
+        self.out_layer.bias.data.uniform_(-fout, fout)
 
     def forward(self, x):
         x = torch.nn.ReLU(self.h1_layer(x))
