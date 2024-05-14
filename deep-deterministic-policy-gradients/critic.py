@@ -6,24 +6,34 @@ class CriticNetwork(torch.nn.Module):
     def __init__(
         self,
         input_shape,
-        output_shape,
+        n_actions,
         h1_size=400,
         h2_size=300,
         lr=1e-3,
         decay=1e-2,
-        chkpt_path="model.pt",
+        chkpt_path="critic.pt",
     ):
         super(CriticNetwork, self).__init__()
         self.input_shape = input_shape
-        self.output_shape = output_shape
+        self.n_actions = n_actions
         self.h1_size = h1_size
         self.h2_size = h2_size
         self.lr = lr
         self.decay = decay
         self.chkpt_path = chkpt_path
+
         self.h1_layer = torch.nn.Linear(*self.input_shape, self.h1_size)
         self.h2_layer = torch.nn.Linear(self.h1_size, self.h2_size)
-        self.out_layer = torch.nn.Linear(self.h2_size, self.output_shape)
+
+        # use layer norm b/c it isn't affected by batch size
+        # batch norm also fails to copy running avg to target networks
+        self.ln1 = torch.nn.LayerNorm(self.h1_size)
+        self.ln2 = torch.nn.LayerNorm(self.h2_size)
+
+        # from paper - action vals aren't input until after 2nd hidden layer
+        self.action_vals = torch.nn.Linear(self.n_actions, self.h2_size)
+
+        self.out_layer = torch.nn.Linear(self.h2_size, 1)
         self.optimizer = torch.optim.Adam(lr=self.lr, weight_decay=self.decay)
         self.init_weights()
 
