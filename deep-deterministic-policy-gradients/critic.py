@@ -34,8 +34,15 @@ class CriticNetwork(torch.nn.Module):
         self.action_vals = torch.nn.Linear(self.n_actions, self.h2_size)
 
         self.out_layer = torch.nn.Linear(self.h2_size, 1)
-        self.optimizer = torch.optim.Adam(lr=self.lr, weight_decay=self.decay)
+
         self.init_weights()
+
+        self.optimizer = torch.optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=self.decay
+        )
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(self.device)
 
     def init_weights(self):
         f1 = 1.0 / np.sqrt(self.h1_layer.weight.data.size()[0])
@@ -54,11 +61,18 @@ class CriticNetwork(torch.nn.Module):
         self.out_layer.weight.data.uniform_(-fout, fout)
         self.out_layer.bias.data.uniform_(-fout, fout)
 
-    def forward(self, x):
-        x = torch.nn.ReLU(self.h1_layer(x))
-        x = torch.nn.ReLU(self.h2_layer(x))
-        x = torch.nn.BatchNorm1d(x)
-        return torch.nn.ReLU(self.out_layer(x))
+    def forward(self, state, action):
+        state = self.h1_layer(state)
+        state = torch.nn.functional.relu(self.ln1(state))
+
+        state = self.h2_layer(state)
+        state = self.ln2(state)
+
+        action = self.action_vals(action)
+
+        # add state and action prior to ReLu activation
+        q = torch.nn.functional.relu(torch.add(state, action))
+        return self.out_layer(q)
 
     def save_checkpoint(self, epoch, loss):
         torch.save(
