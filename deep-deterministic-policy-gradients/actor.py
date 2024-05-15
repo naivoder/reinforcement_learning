@@ -51,6 +51,7 @@ class ActorNetwork(torch.nn.Module):
         self.out_layer.bias.data.uniform_(-fout, fout)
 
     def forward(self, state):
+        # doing layer norm prior to relu so it accounts for negative values
         state = self.h1_layer(state)
         state = torch.nn.functional.relu(self.ln1(state))
 
@@ -60,6 +61,7 @@ class ActorNetwork(torch.nn.Module):
         return torch.nn.functional.tanh(self.out_layer(state))
 
     def save_checkpoint(self, epoch, loss):
+        # torch.save(self.state_dict(), self.chkpt_path)
         torch.save(
             {
                 "epoch": epoch,
@@ -71,6 +73,7 @@ class ActorNetwork(torch.nn.Module):
         )
 
     def load_checkpoint(self, chkpt_path):
+        # self.load_state_dict(torch.load(self.chkpt_path))
         chkpt = torch.load(chkpt_path)
         self.load_state_dict(chkpt["model_state_dict"])
         self.optimizer.load_state_dict(chkpt["optimizer_state_dict"])
