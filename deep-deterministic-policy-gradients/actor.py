@@ -72,9 +72,9 @@ class ActorNetwork(torch.nn.Module):
             self.chkpt_path,
         )
 
-    def load_checkpoint(self, chkpt_path):
+    def load_checkpoint(self):
         # self.load_state_dict(torch.load(self.chkpt_path))
-        chkpt = torch.load(chkpt_path)
+        chkpt = torch.load(self.chkpt_path)
         self.load_state_dict(chkpt["model_state_dict"])
         self.optimizer.load_state_dict(chkpt["optimizer_state_dict"])
         epoch = chkpt["epoch"]
