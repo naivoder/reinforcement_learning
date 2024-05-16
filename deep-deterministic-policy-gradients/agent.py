@@ -78,11 +78,11 @@ class DDPGAgent(torch.nn.Module):
         critic_values = self.critic(states, actions)
 
         # set target critic value to zero for terminal states
-        target_critic_values[done] = 0.0
+        target_critic_values[done] = 0.0  # fix dim issue
         target_critic_values = target_critic_values.view(-1)
 
         target = rewards + self.gamma * target_critic_values
-        target = target.view(self.batch_size, 1)
+        target = target.view(self.batch_size, 1)  # add batch dim
 
         self.critic.optimizer.zero_grad()
         critic_loss = torch.nn.functional.mse_loss(target, critic_values)
@@ -96,3 +96,5 @@ class DDPGAgent(torch.nn.Module):
         self.actor.optimizer.step()
 
         self.update_network_parameters()
+
+        return actor_loss, critic_loss
