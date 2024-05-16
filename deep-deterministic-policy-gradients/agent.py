@@ -18,7 +18,7 @@ class DDPGAgent(torch.nn.Module):
         batch_size=64,
         mem_size=1e6,
     ):
-        super(self, DDPGAgent).__init__()
+        super(DDPGAgent, self).__init__()
         self.tau = tau
         self.alpha = alpha
         self.beta = beta
@@ -59,3 +59,40 @@ class DDPGAgent(torch.nn.Module):
         self.critic.load_checkpoint()
         self.target_actor.load_checkpoint()
         self.target_critic.load_checkpoint()
+
+    def learn(self):
+        if self.memory.mem_counter() < self.batch_size:
+            return
+
+        states, actions, rewards, next_states, done = self.replay_buffer.sample(
+            self.batch_size
+        )
+        states = torch.tensor(states, torch.float).to(self.actor.device)
+        actions = torch.tensor(actions, torch.float).to(self.actor.device)
+        next_states = torch.tensor(next_states, torch.float).to(self.actor.device)
+        rewards = torch.tensor(rewards, torch.float).to(self.actor.device)
+        done = torch.tensor(done).to(self.actor.device)
+
+        target_actions = self.target_actor(next_states)
+        target_critic_values = self.target_critic(next_states, target_actions)
+        critic_values = self.critic(states, actions)
+
+        # set target critic value to zero for terminal states
+        target_critic_values[done] = 0.0
+        target_critic_values = target_critic_values.view(-1)
+
+        target = rewards + self.gamma * target_critic_values
+        target = target.view(self.batch_size, 1)
+
+        self.critic.optimizer.zero_grad()
+        critic_loss = torch.nn.functional.mse_loss(target, critic_values)
+        critic_loss.backward()
+        self.critic.optimizer.step()
+
+        self.actor.optimizer.zero_grad()
+        actor_loss = -self.critic(states, self.actor(states))
+        actor_loss = torch.mean(actor_loss)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        self.update_network_parameters()
