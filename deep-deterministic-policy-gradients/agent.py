@@ -4,6 +4,7 @@ from noise import OrnsteinUhlenbeckActionNoise
 from actor import ActorNetwork
 from critic import CriticNetwork
 from memory import ReplayBuffer
+from copy import deepcopy
 
 
 class DDPGAgent(torch.nn.Module):
@@ -98,3 +99,29 @@ class DDPGAgent(torch.nn.Module):
         self.update_network_parameters()
 
         return actor_loss, critic_loss
+
+    def update_network_parameters(self, tau=None):
+        if tau is None:
+            tau = self.tau
+
+        actor_params = dict(self.actor.named_parameters())
+        target_actor_params = dict(self.target_actor.named_parameters())
+        for name in actor_params:
+            actor_params[name] = (
+                tau * actor_params[name].clone()
+                + (1 - tau) * target_actor_params[name].clone()
+            )
+        self.target_actor.load_state_dict(actor_params)
+
+        critic_params = dict(self.critic.named_parameters())
+        target_critic_params = dict(self.target_critic.named_parameters())
+        for name in critic_params:
+            critic_params[name] = (
+                tau * critic_params[name].clone()
+                + (1 - tau) * target_critic_params[name].clone()
+            )
+        self.critic_actor.load_state_dict(critic_params)
+
+        # To use batch norm instead of layer norm:
+        # self.target_actor.load_state_dict(actor_params, strict=False)
+        # self.critic_actor.load_state_dict(critic_params)
