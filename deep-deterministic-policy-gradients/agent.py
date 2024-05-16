@@ -50,8 +50,12 @@ class DDPGAgent(torch.nn.Module):
 
     def save_checkpoints(self, epoch, loss):
         self.actor.save_checkpoint(epoch, loss)
+        self.target_actor.save_checkpoint(epoch, loss)
         self.critic.save_checkpoint(epoch, loss)
+        self.target_critic.save_checkpoint(epoch, loss)
 
     def load_checkpoints(self):
         self.actor.load_checkpoint()
         self.critic.load_checkpoint()
+        self.target_actor.load_checkpoint()
+        self.target_critic.load_checkpoint()
