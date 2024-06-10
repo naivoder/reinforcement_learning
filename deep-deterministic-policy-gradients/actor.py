@@ -10,7 +10,7 @@ class ActorNetwork(torch.nn.Module):
         h1_size=400,
         h2_size=300,
         lr=1e-4,
-        chkpt_path="actor.pt",
+        chkpt_path="weights/actor.pt",
     ):
         super(ActorNetwork, self).__init__()
         self.input_shape = input_shape
@@ -28,7 +28,7 @@ class ActorNetwork(torch.nn.Module):
         self.ln1 = torch.nn.LayerNorm(self.h1_size)
         self.ln2 = torch.nn.LayerNorm(self.h2_size)
 
-        self.out_layer = torch.nn.Linear(self.h2_size, self.n_actions)
+        self.out_layer = torch.nn.Linear(self.h2_size, *self.n_actions)
 
         self.init_weights()
 
