@@ -7,10 +7,10 @@ class ReplayBuffer:
         self.mem_counter = 0
         self.state_memory = np.zeros((self.buffer_length, *input_shape))
         self.next_state_memory = np.zeros((self.buffer_length, *input_shape))
-        self.action_memory = np.zeros((self.buffer_length, n_actions))
+        self.action_memory = np.zeros((self.buffer_length, *n_actions))
         self.reward_memory = np.zeros((self.buffer_length))
         self.terminal_memory = np.zeros(
-            self.buffer_length, dtype=np.bool
+            self.buffer_length, dtype=bool
         )  # use as mask for critic
 
     def store_transition(self, state, action, reward, next_state, done):
