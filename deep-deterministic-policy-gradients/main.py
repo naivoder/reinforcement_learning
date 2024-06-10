@@ -3,6 +3,10 @@ import numpy as np
 from agent import DDPGAgent
 from utils import plot_running_avg
 
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 if __name__ == "__main__":
     N_GAMES = 1000
 
@@ -36,7 +40,7 @@ if __name__ == "__main__":
             agent.save_checkpoints(i + 1, score)
 
         print(
-            f"[Episode {i + 1:04}/{N_GAMES}]\tScore = {score}\tAverage = {avg_score}",
+            f"[Episode {i + 1:04}/{N_GAMES}]\tScore = {score:.4f}\tAverage = {avg_score:4f}",
             end="\r",
         )
 
