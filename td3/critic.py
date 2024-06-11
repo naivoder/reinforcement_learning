@@ -26,11 +26,6 @@ class CriticNetwork(torch.nn.Module):
         self.h1_layer = torch.nn.Linear(input_features, self.h1_size)
         self.h2_layer = torch.nn.Linear(self.h1_size, self.h2_size)
 
-        # use layer norm b/c it isn't affected by batch size
-        # batch norm also fails to copy running avg to target networks
-        self.ln1 = torch.nn.LayerNorm(self.h1_size)
-        self.ln2 = torch.nn.LayerNorm(self.h2_size)
-
         self.out_layer = torch.nn.Linear(self.h2_size, 1)
 
         self.optimizer = torch.optim.Adam(
@@ -43,11 +38,8 @@ class CriticNetwork(torch.nn.Module):
     def forward(self, state, action):
         x = torch.concatenate(state, action)
 
-        x = self.h1_layer(x)
-        x = torch.nn.functional.relu(self.ln1(x))
-
-        x = self.h2_layer(x)
-        x = torch.nn.functional.relu(self.ln2(x))
+        x = torch.nn.functional.relu(self.h1_layer(x))
+        x = torch.nn.functional.relu(self.h2_layer(x))
 
         return self.out_layer(x)
 
