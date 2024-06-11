@@ -23,11 +23,6 @@ class ActorNetwork(torch.nn.Module):
         self.h1_layer = torch.nn.Linear(*self.input_shape, self.h1_size)
         self.h2_layer = torch.nn.Linear(self.h1_size, self.h2_size)
 
-        # use layer norm b/c it isn't affected by batch size
-        # batch norm also fails to copy running avg to target networks
-        self.ln1 = torch.nn.LayerNorm(self.h1_size)
-        self.ln2 = torch.nn.LayerNorm(self.h2_size)
-
         self.out_layer = torch.nn.Linear(self.h2_size, *self.n_actions)
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -36,14 +31,9 @@ class ActorNetwork(torch.nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        # doing layer norm prior to relu so it accounts for negative values
-        state = self.h1_layer(state)
-        state = torch.nn.functional.relu(self.ln1(state))
-
-        state = self.h2_layer(state)
-        state = torch.nn.functional.relu(self.ln2(state))
-
-        return torch.nn.functional.tanh(self.out_layer(state))
+        x = torch.nn.functional.relu(self.h1_layer(state))
+        x = torch.nn.functional.relu(self.h2_layer(x))
+        return torch.nn.functional.tanh(self.out_layer(x))
 
     def save_checkpoint(self, epoch, loss):
         # torch.save(self.state_dict(), self.chkpt_path)
