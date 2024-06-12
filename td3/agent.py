@@ -38,17 +38,36 @@ class DDPGAgent(torch.nn.Module):
         self.learn_step_counter = 0
         self.time_step = 0
 
-        self.replay_buffer = ReplayBuffer(
-            input_dims, self.n_actions, buffer_length=mem_size
+        self.memory = ReplayBuffer(input_dims, self.n_actions, buffer_length=mem_size)
+
+        self.actor = ActorNetwork(
+            input_dims, self.n_actions, lr=self.alpha, chkpt_path="weights/actor.pt"
+        )
+        self.target_actor = ActorNetwork(
+            input_dims,
+            self.n_actions,
+            lr=self.alpha,
+            chkpt_path="weights/target_actor.pt",
         )
 
-        self.actor = ActorNetwork(input_dims, self.n_actions, lr=self.alpha)
-        self.target_actor = ActorNetwork(input_dims, self.n_actions, lr=self.alpha)
-
-        self.critic_1 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
-        self.critic_2 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
-        self.target_critic_1 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
-        self.target_critic_2 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
+        self.critic_1 = CriticNetwork(
+            input_dims, self.n_actions, lr=self.beta, chkpt_path="weights/critic_1.pt"
+        )
+        self.critic_2 = CriticNetwork(
+            input_dims, self.n_actions, lr=self.beta, chkpt_path="weights/critic_2.pt"
+        )
+        self.target_critic_1 = CriticNetwork(
+            input_dims,
+            self.n_actions,
+            lr=self.beta,
+            chkpt_path="weights/target_critic_1.pt",
+        )
+        self.target_critic_2 = CriticNetwork(
+            input_dims,
+            self.n_actions,
+            lr=self.beta,
+            chkpt_path="weights/target_critic_2.pt",
+        )
 
         self.update_network_parameters(tau=1)
 
@@ -64,7 +83,7 @@ class DDPGAgent(torch.nn.Module):
             mu = self.actor(state).to(self.actor.device)
 
         # add gauss(0, 0.1) noise to deterministic output
-        mu = mu + torch.randn(mu.size()).to(self.actor.device) * self.noise
+        mu += torch.randn(mu.size()).to(self.actor.device) * self.noise
 
         # clamp noise to action space
         action_min = torch.tensor(self.action_low_bounds).to(self.actor.device)
@@ -78,25 +97,29 @@ class DDPGAgent(torch.nn.Module):
         return mu.cpu().detach().numpy()
 
     def store_transition(self, state, action, reward, next_state, done):
-        self.replay_buffer.store_transition(state, action, reward, next_state, done)
+        self.memory.store_transition(state, action, reward, next_state, done)
 
     def save_checkpoints(self, epoch, loss):
         self.actor.save_checkpoint(epoch, loss)
         self.target_actor.save_checkpoint(epoch, loss)
-        self.critic.save_checkpoint(epoch, loss)
-        self.target_critic.save_checkpoint(epoch, loss)
+        self.critic_1.save_checkpoint(epoch, loss)
+        self.target_critic_1.save_checkpoint(epoch, loss)
+        self.critic_2.save_checkpoint(epoch, loss)
+        self.target_critic_2.save_checkpoint(epoch, loss)
 
     def load_checkpoints(self):
         self.actor.load_checkpoint()
-        self.critic.load_checkpoint()
         self.target_actor.load_checkpoint()
-        self.target_critic.load_checkpoint()
+        self.critic_1.load_checkpoint()
+        self.target_critic_1.load_checkpoint()
+        self.critic_2.load_checkpoint()
+        self.target_critic_2.load_checkpoint()
 
     def learn(self):
-        if self.replay_buffer.mem_counter < self.batch_size:
+        if self.memory.mem_counter < self.batch_size:
             return
 
-        states, actions, rewards, next_states, done = self.replay_buffer.sample(
+        states, actions, rewards, next_states, done = self.memory.sample(
             self.batch_size
         )
         states = torch.Tensor(states).to(self.actor.device)
@@ -106,30 +129,55 @@ class DDPGAgent(torch.nn.Module):
         done = torch.Tensor(done).to(self.actor.device).to(torch.bool)
 
         target_actions = self.target_actor(next_states)
-        target_critic_values = self.target_critic(next_states, target_actions)
-        critic_values = self.critic(states, actions)
+        target_actions += torch.clamp(torch.randn(self.n_actions) * 0.2, -0.5, 0.5)
+        action_min = torch.tensor(self.action_low_bounds).to(self.actor.device)
+        action_max = torch.tensor(self.action_high_bounds).to(self.actor.device)
+        target_actions = torch.clamp(target_actions, action_min, action_max)
+
+        target_c1_values = self.target_critic_1(next_states, target_actions)
+        target_c2_values = self.target_critic_2(next_states, target_actions)
+        target_values = torch.min(target_c1_values, target_c2_values)
 
         # set target critic value to zero for terminal states
-        target_critic_values[done] = 0.0  # fix dim issue
-        target_critic_values = target_critic_values.view(-1)
+        target_values[done] = 0.0  # fix dim issue
+        target_values = target_values.view(-1)
 
-        target = rewards + self.gamma * target_critic_values
+        target = rewards + self.gamma * target_values
         target = target.view(self.batch_size, 1)  # add batch dim
 
-        self.critic.optimizer.zero_grad()
-        critic_loss = torch.nn.functional.mse_loss(target, critic_values)
+        critic_1_values = self.critic_1(next_states, actions)
+        critic_2_values = self.critic_2(next_states, actions)
+        critic_1_loss = torch.nn.functional.mse_loss(target, critic_1_values)
+        critic_2_loss = torch.nn.functional.mse_loss(target, critic_2_values)
+
+        # Phil does this differently.. he adds the critic losses together
+        # critic_loss = critic_1_loss + critic_2_loss
+        # critic_loss.backward()
+        # self.critic_1.optimizer.step()
+        # self.critic_2.optimizer.step()
+        #
+        # I don't agree that this is what the paper says, trying it my way first...
+
+        critic_loss = torch.min(critic_1_loss, critic_2_loss)
+
+        self.critic_1.optimizer.zero_grad()
+        critic_loss.backward(retain_graph=True)
+        self.critic_1.optimizer.step()
+
+        self.critic_2.optimizer.zero_grad()
         critic_loss.backward()
-        self.critic.optimizer.step()
+        self.critic_2.optimizer.step()
 
-        self.actor.optimizer.zero_grad()
-        actor_loss = -self.critic(states, self.actor(states))
-        actor_loss = torch.mean(actor_loss)
-        actor_loss.backward()
-        self.actor.optimizer.step()
+        self.learn_step_counter += 1
 
-        self.update_network_parameters()
+        if self.learn_step_counter % self.update_interval == 0:
+            self.actor.optimizer.zero_grad()
+            actor_loss = -self.critic_1(states, self.actor(states))
+            actor_loss = torch.mean(actor_loss)
+            actor_loss.backward()
+            self.actor.optimizer.step()
 
-        return actor_loss, critic_loss
+            self.update_network_parameters()
 
     def update_network_parameters(self, tau=None):
         if tau is None:
@@ -144,15 +192,20 @@ class DDPGAgent(torch.nn.Module):
             )
         self.target_actor.load_state_dict(actor_params)
 
-        critic_params = dict(self.critic.named_parameters())
-        target_critic_params = dict(self.target_critic.named_parameters())
+        critic_params = dict(self.critic_1.named_parameters())
+        target_critic_params = dict(self.target_critic_1.named_parameters())
         for name in critic_params:
             critic_params[name] = (
                 tau * critic_params[name].clone()
                 + (1 - tau) * target_critic_params[name].clone()
             )
-        self.target_critic.load_state_dict(critic_params)
+        self.target_critic_1.load_state_dict(critic_params)
 
-        # To use batch norm instead of layer norm:
-        # self.target_actor.load_state_dict(actor_params, strict=False)
-        # self.critic_actor.load_state_dict(critic_params)
+        critic_params = dict(self.critic_2.named_parameters())
+        target_critic_params = dict(self.target_critic_2.named_parameters())
+        for name in critic_params:
+            critic_params[name] = (
+                tau * critic_params[name].clone()
+                + (1 - tau) * target_critic_params[name].clone()
+            )
+        self.target_critic_2.load_state_dict(critic_params)
