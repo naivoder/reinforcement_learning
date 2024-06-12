@@ -1,6 +1,7 @@
 import numpy as np
 import torch as T
 from network import DuelingDeepQNetwork
+from memory import ReplayBuffer
 
 
 class DuelingDDQNAgent:
@@ -9,10 +10,10 @@ class DuelingDDQNAgent:
         gamma,
         epsilon,
         lr,
-        n_actions,
         input_dims,
         batch_size,
         action_space_shape,
+        n_actions=44,
         eps_min=0.01,
         eps_dec=5e-7,
         replace=1000,
@@ -29,10 +30,9 @@ class DuelingDDQNAgent:
         self.eps_dec = eps_dec
         self.replace_target_cnt = replace
         self.chkpt_dir = chkpt_dir
-        self.action_space = [i for i in range(n_actions)]
         self.learn_step_counter = 0
 
-        self.memory = []  # Use a list to store entire episodes
+        self.memory = ReplayBuffer(input_dims, self.n_actions)
 
         self.q_eval = DuelingDeepQNetwork(
             self.lr,
@@ -50,39 +50,46 @@ class DuelingDDQNAgent:
         )
 
     def store_transition(self, state, action, reward, state_, done):
-        self.memory.append((state, action, reward, state_, done))
+        self.memory.store_transition(state, action, reward, state_, done)
+
+    def sample_memory(self):
+        state, action, reward, new_state, done = self.memory.sample_buffer(
+            self.batch_size
+        )
+
+        states = T.tensor(state).to(self.q_eval.device)
+        rewards = T.tensor(reward).to(self.q_eval.device)
+        dones = T.tensor(done).to(self.q_eval.device)
+        actions = T.tensor(action).to(self.q_eval.device)
+        states_ = T.tensor(new_state).to(self.q_eval.device)
+
+        return states, actions, rewards, states_, dones
 
     def choose_action(self, observation, valid_categories):
         remaining_rolls = observation[5]
+
         if np.random.random() > self.epsilon:
             state = np.array([observation], copy=False, dtype=np.float32)
             state_tensor = T.tensor(state).to(self.q_eval.device)
             _, advantages = self.q_eval.forward(state_tensor)
+            advantages = advantages.squeeze()  # Ensure the tensor shape is correct
 
-            # Mask the advantages for invalid actions
-            mask = np.ones(self.n_actions)
-            for cat in valid_categories:
-                mask_cat_index = np.ravel_multi_index(
-                    (0, 0, 0, 0, 0, cat), self.action_space_shape
-                )
-                mask[mask_cat_index] = 0
-
-            mask = T.tensor(mask, device=self.q_eval.device)
-            masked_advantages = (
-                advantages + mask * -1e9
-            )  # Large negative number to mask invalid actions
-            action = T.argmax(masked_advantages).item()
+            if remaining_rolls > 0:
+                # Choose a re-roll action
+                action = T.argmax(advantages[:31]).item()
+            else:
+                # Choose a score action from valid categories
+                valid_advantages = [
+                    advantages[31 + cat].item() for cat in valid_categories
+                ]
+                action = 31 + valid_categories[np.argmax(valid_advantages)]
         else:
-            if remaining_rolls > 0:  # Re-roll dice if there are remaining rolls
-                reroll_action = np.random.choice([0, 1], size=5)
-                score_action = 0  # Placeholder for score action, as it will be ignored
-            else:  # Pick a valid scoring category
-                reroll_action = np.zeros(5, dtype=int)  # No re-roll
-                score_action = np.random.choice(valid_categories)
-
-            action = np.ravel_multi_index(
-                (*reroll_action, score_action), self.action_space_shape
-            )
+            if remaining_rolls > 0:
+                # Randomly choose a re-roll action
+                action = np.random.choice(31)
+            else:
+                # Randomly choose a score action from valid categories
+                action = 31 + np.random.choice(valid_categories)
 
         return action
 
@@ -99,42 +106,35 @@ class DuelingDDQNAgent:
         )
 
     def learn(self):
-        if len(self.memory) == 0:
+        if self.memory.counter < self.batch_size:
             return
 
         self.q_eval.optimizer.zero_grad()
+
         self.replace_target_network()
 
-        G = 0  # Initialize the return
-        states, actions, rewards, states_, dones = zip(*self.memory)
-        states = T.tensor(states, dtype=T.float32).to(self.q_eval.device)
-        actions = T.tensor(actions).to(self.q_eval.device)
-        rewards = T.tensor(rewards).to(self.q_eval.device)
-        states_ = T.tensor(states_, dtype=T.float32).to(self.q_eval.device)
-        dones = T.tensor(dones).to(self.q_eval.device)
+        states, actions, rewards, states_, dones = self.sample_memory()
+        indices = np.arange(self.batch_size)
 
         V_s, A_s = self.q_eval.forward(states)
-        q_pred = T.add(V_s, (A_s - A_s.mean(dim=1, keepdim=True)))
-
         V_s_, A_s_ = self.q_next.forward(states_)
+
+        V_s_eval, A_s_eval = self.q_eval.forward(states_)
+
+        q_pred = T.add(V_s, (A_s - A_s.mean(dim=1, keepdim=True)))[indices, actions]
+
         q_next = T.add(V_s_, (A_s_ - A_s_.mean(dim=1, keepdim=True)))
+
+        q_eval = T.add(V_s_eval, (A_s_eval - A_s_eval.mean(dim=1, keepdim=True)))
+
+        max_actions = T.argmax(q_eval, dim=1)
         q_next[dones] = 0.0
 
-        Gs = []
-        for reward in rewards[::-1]:
-            G = reward + self.gamma * G
-            Gs.insert(0, G)
-        Gs = T.tensor(Gs, dtype=T.float32).to(self.q_eval.device)
-
-        q_target = q_pred.clone()
-        for i in range(len(actions)):
-            q_target[i, actions[i]] = Gs[i]
+        q_target = rewards + self.gamma * q_next[indices, max_actions]
 
         loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
         loss.backward()
         self.q_eval.optimizer.step()
-
-        self.memory = []  # Clear memory after learning
         self.learn_step_counter += 1
 
         self.decrement_epsilon()

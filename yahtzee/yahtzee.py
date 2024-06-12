@@ -11,7 +11,7 @@ class YahtzeeEnv(gym.Env):
 
     def __init__(self):
         super(YahtzeeEnv, self).__init__()
-        self.action_space = gym.spaces.MultiDiscrete([2] * 5 + [13])
+        self.action_space = gym.spaces.Discrete(44)  # 31 re-rolls + 13 score actions
         self.observation_space = gym.spaces.Dict(
             {
                 "dice": gym.spaces.Box(low=1, high=6, shape=(5,), dtype=int),
@@ -33,16 +33,15 @@ class YahtzeeEnv(gym.Env):
         return self.observation(), {}
 
     def step(self, action):
-        reroll_action = action[:5]
-        score_action = action[5]
-
-        if self.remaining_rolls > 0 and any(reroll_action):
+        if action < 31:  # Re-roll action
+            reroll_action = [int(x) for x in f"{action:05b}"]
             self.reroll_dice(reroll_action)
             self.remaining_rolls -= 1
             reward = (
                 -0.1
             )  # Small penalty to encourage scoring instead of endless re-rolling
-        else:
+        else:  # Score action
+            score_action = action - 31
             if self.scorecard[score_action] != -1:
                 reward = (
                     -10
@@ -52,10 +51,6 @@ class YahtzeeEnv(gym.Env):
                 self.score_category(score_action)
                 new_score = self.get_total_score()
                 reward = new_score - current_score
-
-                if self.upper_section_score() >= 63:
-                    # Large reward for getting the bonus
-                    reward += 10
 
                 if self.rounds_left == 1:
                     reward += new_score  # Significant reward for final score
@@ -117,10 +112,6 @@ class YahtzeeEnv(gym.Env):
             print("Remaining rolls: ", self.remaining_rolls)
         elif mode == "ansi":
             return f"Dice: {self.dice} \nScorecard: {self.scorecard} \nRemaining rolls: {self.remaining_rolls}"
-
-    def upper_section_score(self):
-        adjusted_scores = [max(0, score) for score in self.scorecard]
-        return sum(adjusted_scores[:6])
 
     def get_total_score(self):
         adjusted_scores = [max(0, score) for score in self.scorecard]

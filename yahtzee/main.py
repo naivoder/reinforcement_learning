@@ -11,12 +11,12 @@ def preprocess_state(state):
     return state
 
 
-def plot_running_average(rewards, window=100):
+def plot_running_average(rewards, window=100, metric="Rewards"):
     running_avg = np.convolve(rewards, np.ones(window) / window, mode="valid")
     plt.plot(running_avg)
     plt.xlabel("Episode")
-    plt.ylabel(f"Running Average of Last {window} Rewards")
-    plt.title(f"Running Average of Rewards Over Last {window} Episodes")
+    plt.ylabel(f"Running Average of Last {window} {metric}")
+    plt.title(f"Running Average of {metric} Over Last {window} Episodes")
     plt.show()
 
 
@@ -35,22 +35,22 @@ def train_agent(env, agent, episodes=10000):
             ]  # Unscored categories
             action_index = agent.choose_action(state, valid_categories)
 
-            action = np.unravel_index(action_index, env.action_space.nvec)
-            next_state, reward, done, _, _ = env.step(action)
+            next_state, reward, done, _, _ = env.step(action_index)
             next_state = preprocess_state(next_state)
             total_reward += reward
 
             agent.store_transition(state, action_index, reward, next_state, done)
             state = next_state
 
-        agent.learn()  # Learn from the entire episode at the end
+            agent.learn()
+
         total_score = env.get_total_score()
         scores_per_episode.append(total_score)
         rewards_per_episode.append(total_reward)
 
         avg_score = np.mean(scores_per_episode[-100:])
 
-        if (episode + 1) % 100 == 0:
+        if (episode + 1) % 1000 == 0:
             print(
                 f"[Episode {episode + 1}/{episodes}] Avg Score: {avg_score}  Epsilon: {agent.epsilon:.4f}"
             )
@@ -61,23 +61,24 @@ def train_agent(env, agent, episodes=10000):
 if __name__ == "__main__":
     env = YahtzeeEnv()
     state_shape = (5 + 1 + 13,)
-    action_space_shape = env.action_space.nvec
-    num_actions = np.prod(env.action_space.nvec)
+    action_space_shape = env.action_space.shape
+    num_actions = 44
 
     agent = DuelingDDQNAgent(
         gamma=0.99,
         epsilon=1.0,
-        lr=0.0001,
+        lr=1e-3,
         action_space_shape=action_space_shape,
         input_dims=state_shape,
-        batch_size=128,
+        batch_size=256,
         eps_min=0.1,
         eps_dec=1e-5,
-        replace=100,
+        replace=1000,
         chkpt_dir="weights/ddqn",
     )
 
-    rewards, scores = train_agent(env, agent, episodes=10000)
+    rewards, scores = train_agent(env, agent, episodes=10000000)
     env.close()
 
-    plot_running_average(rewards, window=100)
+    plot_running_average(rewards, window=1000, metric="Rewards")
+    plot_running_average(scores, window=1000, metric="Scores")
