@@ -48,9 +48,11 @@ def train_agent(env, agent, episodes=1000):
         scores_per_episode.append(total_score)
         rewards_per_episode.append(total_reward)
 
+        avg_score = np.mean(scores_per_episode[:-100])
+
         if (episode + 1) % 100 == 0:
             print(
-                f"[Episode {episode + 1}/{episodes}] Score: {total_score}  Epsilon: {agent.epsilon:.4f}"
+                f"[Episode {episode + 1}/{episodes}] Avg Score: {avg_score}  Epsilon: {agent.epsilon:.4f}"
             )
 
     return rewards_per_episode, scores_per_episode
