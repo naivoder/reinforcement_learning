@@ -53,6 +53,10 @@ class YahtzeeEnv(gym.Env):
                 new_score = self.get_total_score()
                 reward = new_score - current_score
 
+                if self.upper_section_score() >= 63:
+                    # Large reward for getting the bonus
+                    reward += 10
+
                 if self.rounds_left == 1:
                     reward += new_score  # Significant reward for final score
 
@@ -113,6 +117,10 @@ class YahtzeeEnv(gym.Env):
             print("Remaining rolls: ", self.remaining_rolls)
         elif mode == "ansi":
             return f"Dice: {self.dice} \nScorecard: {self.scorecard} \nRemaining rolls: {self.remaining_rolls}"
+
+    def upper_section_score(self):
+        adjusted_scores = [max(0, score) for score in self.scorecard]
+        return sum(adjusted_scores[:6])
 
     def get_total_score(self):
         adjusted_scores = [max(0, score) for score in self.scorecard]

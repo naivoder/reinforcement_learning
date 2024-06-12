@@ -49,8 +49,9 @@ def train_agent(env, agent, episodes=1000):
         rewards_per_episode.append(total_reward)
 
         if (episode + 1) % 100 == 0:
-            print(f"[Episode {episode + 1}/{episodes}] Total Score: {total_score}")
-            print(f"Epsilon: {agent.epsilon}")
+            print(
+                f"[Episode {episode + 1}/{episodes}] Score: {total_score}  Epsilon: {agent.epsilon:.4f}"
+            )
 
     return rewards_per_episode, scores_per_episode
 
@@ -64,7 +65,7 @@ if __name__ == "__main__":
     agent = DuelingDDQNAgent(
         gamma=0.99,
         epsilon=1.0,
-        lr=0.001,
+        lr=0.0001,
         action_space_shape=action_space_shape,
         input_dims=state_shape,
         batch_size=128,
