@@ -9,13 +9,18 @@ class DDPGAgent(torch.nn.Module):
     def __init__(
         self,
         input_dims,
-        n_actions,
+        action_low_bounds,
+        action_high_bounds,
+        n_actions=2,
         tau=5e-3,
         alpha=1e-4,
         beta=1e-3,
         gamma=0.99,
         batch_size=100,
         mem_size=int(1e6),
+        warmup=int(1e3),
+        update_interval=2,
+        noise=0.1,
     ):
         super(DDPGAgent, self).__init__()
         self.tau = tau
@@ -23,27 +28,52 @@ class DDPGAgent(torch.nn.Module):
         self.beta = beta
         self.gamma = gamma
         self.batch_size = batch_size
+        self.action_low_bounds = action_low_bounds
+        self.action_high_bounds = action_high_bounds
+        self.warmup = warmup
+        self.n_actions = n_actions
+        self.update_interval = update_interval
+        self.noise = noise
 
-        self.replay_buffer = ReplayBuffer(input_dims, n_actions, buffer_length=mem_size)
-        self.action_noise = None  # fix this later
+        self.learn_step_counter = 0
+        self.time_step = 0
 
-        self.actor = ActorNetwork(input_dims, n_actions, lr=self.alpha)
-        self.target_actor = ActorNetwork(input_dims, n_actions, lr=self.alpha)
+        self.replay_buffer = ReplayBuffer(
+            input_dims, self.n_actions, buffer_length=mem_size
+        )
 
-        self.critic = CriticNetwork(input_dims, n_actions, lr=self.beta)
-        self.target_critic_1 = CriticNetwork(input_dims, n_actions, lr=self.beta)
-        self.target_critic_2 = CriticNetwork(input_dims, n_actions, lr=self.beta)
+        self.actor = ActorNetwork(input_dims, self.n_actions, lr=self.alpha)
+        self.target_actor = ActorNetwork(input_dims, self.n_actions, lr=self.alpha)
+
+        self.critic_1 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
+        self.critic_2 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
+        self.target_critic_1 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
+        self.target_critic_2 = CriticNetwork(input_dims, self.n_actions, lr=self.beta)
 
         self.update_network_parameters(tau=1)
 
     def choose_action(self, state):
         self.actor.eval()
-        state = torch.Tensor(np.array(state)).to(self.actor.device)
-        mu = self.actor(state).to(self.actor.device)
 
-        # add noise to deterministic output
-        mu = mu + torch.randn(mu.size(), dtype=torch.float).to(self.actor.device) * 0.1
+        if self.time_step < self.warmup:
+            mu = torch.randn(self.n_actions).to(self.actor.device) * self.noise
+            # mu = torch.tensor(np.random.normal(scale=self.noise, size=self.n_actions))
+
+        else:
+            state = torch.Tensor(np.array(state)).to(self.actor.device)
+            mu = self.actor(state).to(self.actor.device)
+
+        # add gauss(0, 0.1) noise to deterministic output
+        mu = mu + torch.randn(mu.size()).to(self.actor.device) * self.noise
+
+        # clamp noise to action space
+        action_min = torch.tensor(self.action_low_bounds).to(self.actor.device)
+        action_max = torch.tensor(self.action_high_bounds).to(self.actor.device)
+        mu = torch.clamp(mu, action_min, action_max)
+
+        self.time_step += 1
         self.actor.train()
+
         # return mu.cpu().detach().numpy()[0]
         return mu.cpu().detach().numpy()
 
