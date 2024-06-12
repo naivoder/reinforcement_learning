@@ -1,7 +1,6 @@
 import numpy as np
 import torch as T
 from network import DuelingDeepQNetwork
-from memory import ReplayBuffer
 
 
 class DuelingDDQNAgent:
@@ -10,6 +9,7 @@ class DuelingDDQNAgent:
         gamma,
         epsilon,
         lr,
+        n_actions,
         input_dims,
         batch_size,
         action_space_shape,
@@ -21,7 +21,7 @@ class DuelingDDQNAgent:
         self.gamma = gamma
         self.epsilon = epsilon
         self.lr = lr
-        self.n_actions = np.prod(action_space_shape)
+        self.n_actions = n_actions
         self.input_dims = input_dims
         self.batch_size = batch_size
         self.action_space_shape = action_space_shape
@@ -29,9 +29,10 @@ class DuelingDDQNAgent:
         self.eps_dec = eps_dec
         self.replace_target_cnt = replace
         self.chkpt_dir = chkpt_dir
+        self.action_space = [i for i in range(n_actions)]
         self.learn_step_counter = 0
 
-        self.memory = ReplayBuffer(input_dims, self.n_actions)
+        self.memory = []  # Use a list to store entire episodes
 
         self.q_eval = DuelingDeepQNetwork(
             self.lr,
@@ -49,20 +50,7 @@ class DuelingDDQNAgent:
         )
 
     def store_transition(self, state, action, reward, state_, done):
-        self.memory.store_transition(state, action, reward, state_, done)
-
-    def sample_memory(self):
-        state, action, reward, new_state, done = self.memory.sample_buffer(
-            self.batch_size
-        )
-
-        states = T.tensor(state).to(self.q_eval.device)
-        rewards = T.tensor(reward).to(self.q_eval.device)
-        dones = T.tensor(done).to(self.q_eval.device)
-        actions = T.tensor(action).to(self.q_eval.device)
-        states_ = T.tensor(new_state).to(self.q_eval.device)
-
-        return states, actions, rewards, states_, dones
+        self.memory.append((state, action, reward, state_, done))
 
     def choose_action(self, observation, valid_categories):
         remaining_rolls = observation[5]
@@ -111,35 +99,42 @@ class DuelingDDQNAgent:
         )
 
     def learn(self):
-        if self.memory.counter < self.batch_size:
+        if len(self.memory) == 0:
             return
 
         self.q_eval.optimizer.zero_grad()
-
         self.replace_target_network()
 
-        states, actions, rewards, states_, dones = self.sample_memory()
-        indices = np.arange(self.batch_size)
+        G = 0  # Initialize the return
+        states, actions, rewards, states_, dones = zip(*self.memory)
+        states = T.tensor(states, dtype=T.float32).to(self.q_eval.device)
+        actions = T.tensor(actions).to(self.q_eval.device)
+        rewards = T.tensor(rewards).to(self.q_eval.device)
+        states_ = T.tensor(states_, dtype=T.float32).to(self.q_eval.device)
+        dones = T.tensor(dones).to(self.q_eval.device)
 
         V_s, A_s = self.q_eval.forward(states)
+        q_pred = T.add(V_s, (A_s - A_s.mean(dim=1, keepdim=True)))
+
         V_s_, A_s_ = self.q_next.forward(states_)
-
-        V_s_eval, A_s_eval = self.q_eval.forward(states_)
-
-        q_pred = T.add(V_s, (A_s - A_s.mean(dim=1, keepdim=True)))[indices, actions]
-
         q_next = T.add(V_s_, (A_s_ - A_s_.mean(dim=1, keepdim=True)))
-
-        q_eval = T.add(V_s_eval, (A_s_eval - A_s_eval.mean(dim=1, keepdim=True)))
-
-        max_actions = T.argmax(q_eval, dim=1)
         q_next[dones] = 0.0
 
-        q_target = rewards + self.gamma * q_next[indices, max_actions]
+        Gs = []
+        for reward in rewards[::-1]:
+            G = reward + self.gamma * G
+            Gs.insert(0, G)
+        Gs = T.tensor(Gs, dtype=T.float32).to(self.q_eval.device)
+
+        q_target = q_pred.clone()
+        for i in range(len(actions)):
+            q_target[i, actions[i]] = Gs[i]
 
         loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
         loss.backward()
         self.q_eval.optimizer.step()
+
+        self.memory = []  # Clear memory after learning
         self.learn_step_counter += 1
 
         self.decrement_epsilon()

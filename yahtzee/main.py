@@ -11,16 +11,16 @@ def preprocess_state(state):
     return state
 
 
-def plot_running_average(rewards, window=100, metric="Rewards"):
+def plot_running_average(rewards, window=100):
     running_avg = np.convolve(rewards, np.ones(window) / window, mode="valid")
     plt.plot(running_avg)
     plt.xlabel("Episode")
-    plt.ylabel(f"Running Average of Last {window} {metric}")
+    plt.ylabel(f"Running Average of Last {window} Rewards")
     plt.title(f"Running Average of Rewards Over Last {window} Episodes")
     plt.show()
 
 
-def train_agent(env, agent, episodes=1000):
+def train_agent(env, agent, episodes=10000):
     rewards_per_episode, scores_per_episode = [], []
 
     for episode in range(episodes):
@@ -41,9 +41,9 @@ def train_agent(env, agent, episodes=1000):
             total_reward += reward
 
             agent.store_transition(state, action_index, reward, next_state, done)
-            agent.learn()
             state = next_state
 
+        agent.learn()  # Learn from the entire episode at the end
         total_score = env.get_total_score()
         scores_per_episode.append(total_score)
         rewards_per_episode.append(total_reward)
@@ -80,5 +80,4 @@ if __name__ == "__main__":
     rewards, scores = train_agent(env, agent, episodes=10000)
     env.close()
 
-    plot_running_average(rewards, window=100, metric="Rewards")
-    plot_running_average(scores, window=100, metric="Scores")
+    plot_running_average(rewards, window=100)
