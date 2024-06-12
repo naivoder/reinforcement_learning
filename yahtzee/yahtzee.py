@@ -39,14 +39,26 @@ class YahtzeeEnv(gym.Env):
         if self.remaining_rolls > 0 and any(reroll_action):
             self.reroll_dice(reroll_action)
             self.remaining_rolls -= 1
-            reward = 0
+            reward = (
+                -0.1
+            )  # Small penalty to encourage scoring instead of endless re-rolling
         else:
-            current_score = self.get_total_score()
-            self.score_category(score_action)
-            reward = self.get_total_score() - current_score
-            self.rounds_left -= 1
-            self.dice = np.random.randint(1, 7, size=(5,))
-            self.remaining_rolls = 2
+            if self.scorecard[score_action] != -1:
+                reward = (
+                    -10
+                )  # Large penalty for attempting to score in an already scored category
+            else:
+                current_score = self.get_total_score()
+                self.score_category(score_action)
+                new_score = self.get_total_score()
+                reward = new_score - current_score
+
+                if self.rounds_left == 1:
+                    reward += new_score  # Significant reward for final score
+
+                self.rounds_left -= 1
+                self.dice = np.random.randint(1, 7, size=(5,))
+                self.remaining_rolls = 2
 
         return self.observation(), reward, self.rounds_left == 0, False, {}
 
