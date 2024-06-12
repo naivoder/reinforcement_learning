@@ -99,13 +99,13 @@ class DDPGAgent(torch.nn.Module):
     def store_transition(self, state, action, reward, next_state, done):
         self.memory.store_transition(state, action, reward, next_state, done)
 
-    def save_checkpoints(self, epoch, loss):
-        self.actor.save_checkpoint(epoch, loss)
-        self.target_actor.save_checkpoint(epoch, loss)
-        self.critic_1.save_checkpoint(epoch, loss)
-        self.target_critic_1.save_checkpoint(epoch, loss)
-        self.critic_2.save_checkpoint(epoch, loss)
-        self.target_critic_2.save_checkpoint(epoch, loss)
+    def save_checkpoints(self):
+        self.actor.save_checkpoint()
+        self.target_actor.save_checkpoint()
+        self.critic_1.save_checkpoint()
+        self.target_critic_1.save_checkpoint()
+        self.critic_2.save_checkpoint()
+        self.target_critic_2.save_checkpoint()
 
     def load_checkpoints(self):
         self.actor.load_checkpoint()

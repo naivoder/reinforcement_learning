@@ -43,21 +43,23 @@ class CriticNetwork(torch.nn.Module):
 
         return self.out_layer(x)
 
-    def save_checkpoint(self, epoch, loss):
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": self.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "loss": loss,
-            },
-            self.chkpt_path,
-        )
+    def save_checkpoint(self, epoch=None, loss=None):
+        torch.save(self.state_dict(), self.chkpt_path)
+        # torch.save(
+        #     {
+        #         "epoch": epoch,
+        #         "model_state_dict": self.state_dict(),
+        #         "optimizer_state_dict": self.optimizer.state_dict(),
+        #         "loss": loss,
+        #     },
+        #     self.chkpt_path,
+        # )
 
     def load_checkpoint(self):
-        chkpt = torch.load(self.chkpt_path)
-        self.load_state_dict(chkpt["model_state_dict"])
-        self.optimizer.load_state_dict(chkpt["optimizer_state_dict"])
-        epoch = chkpt["epoch"]
-        loss = chkpt["loss"]
-        return epoch, loss
+        self.load_state_dict(torch.load(self.chkpt_path))
+        # chkpt = torch.load(self.chkpt_path)
+        # self.load_state_dict(chkpt["model_state_dict"])
+        # self.optimizer.load_state_dict(chkpt["optimizer_state_dict"])
+        # epoch = chkpt["epoch"]
+        # loss = chkpt["loss"]
+        # return epoch, loss
