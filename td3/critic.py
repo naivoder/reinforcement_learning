@@ -36,7 +36,7 @@ class CriticNetwork(torch.nn.Module):
         self.to(self.device)
 
     def forward(self, state, action):
-        x = torch.concatenate(state, action)
+        x = torch.concatenate((state, action), dim=1)
 
         x = torch.nn.functional.relu(self.h1_layer(x))
         x = torch.nn.functional.relu(self.h2_layer(x))

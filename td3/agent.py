@@ -4,14 +4,16 @@ from actor import ActorNetwork
 from critic import CriticNetwork
 from memory import ReplayBuffer
 
+torch.autograd.set_detect_anomaly(True)
+
 
 class DDPGAgent(torch.nn.Module):
     def __init__(
         self,
         input_dims,
+        n_actions,
         action_low_bounds,
         action_high_bounds,
-        n_actions=2,
         tau=5e-3,
         alpha=1e-4,
         beta=1e-3,
@@ -129,43 +131,37 @@ class DDPGAgent(torch.nn.Module):
         done = torch.Tensor(done).to(self.actor.device).to(torch.bool)
 
         target_actions = self.target_actor(next_states)
-        target_actions += torch.clamp(torch.randn(self.n_actions) * 0.2, -0.5, 0.5)
+        target_actions = target_actions + torch.clamp(
+            torch.tensor(np.random.normal(scale=0.2)), -0.5, 0.5
+        )
         action_min = torch.tensor(self.action_low_bounds).to(self.actor.device)
         action_max = torch.tensor(self.action_high_bounds).to(self.actor.device)
         target_actions = torch.clamp(target_actions, action_min, action_max)
 
         target_c1_values = self.target_critic_1(next_states, target_actions)
         target_c2_values = self.target_critic_2(next_states, target_actions)
-        target_values = torch.min(target_c1_values, target_c2_values)
 
-        # set target critic value to zero for terminal states
-        target_values[done] = 0.0  # fix dim issue
-        target_values = target_values.view(-1)
+        target_c1_values[done] = 0.0
+        target_c2_values[done] = 0.0
+        target_c1_values = target_c1_values.view(-1)
+        target_c2_values = target_c2_values.view(-1)
+        target_values = torch.min(target_c1_values, target_c2_values)
 
         target = rewards + self.gamma * target_values
         target = target.view(self.batch_size, 1)  # add batch dim
 
-        critic_1_values = self.critic_1(next_states, actions)
-        critic_2_values = self.critic_2(next_states, actions)
-        critic_1_loss = torch.nn.functional.mse_loss(target, critic_1_values)
-        critic_2_loss = torch.nn.functional.mse_loss(target, critic_2_values)
-
-        # Phil does this differently.. he adds the critic losses together
-        # critic_loss = critic_1_loss + critic_2_loss
-        # critic_loss.backward()
-        # self.critic_1.optimizer.step()
-        # self.critic_2.optimizer.step()
-        #
-        # I don't agree that this is what the paper says, trying it my way first...
-
-        critic_loss = torch.min(critic_1_loss, critic_2_loss)
+        critic_1_values = self.critic_1(states, actions)
+        critic_2_values = self.critic_2(states, actions)
 
         self.critic_1.optimizer.zero_grad()
-        critic_loss.backward(retain_graph=True)
-        self.critic_1.optimizer.step()
-
         self.critic_2.optimizer.zero_grad()
+
+        critic_1_loss = torch.nn.functional.mse_loss(target, critic_1_values)
+        critic_2_loss = torch.nn.functional.mse_loss(target, critic_2_values)
+        critic_loss = critic_1_loss + critic_2_loss
         critic_loss.backward()
+
+        self.critic_1.optimizer.step()
         self.critic_2.optimizer.step()
 
         self.learn_step_counter += 1

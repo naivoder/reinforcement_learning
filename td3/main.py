@@ -8,23 +8,28 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 if __name__ == "__main__":
-    N_GAMES = 1000
+    N_GAMES = 1500
 
-    env = gym.make("LunarLanderContinuous-v2")
-    agent = DDPGAgent(env.observation_space.shape, env.action_space.shape)
+    env = gym.make("BipedalWalker-v3")
+    observation_space = env.observation_space.shape
+    action_space = env.action_space.shape
+    action_bound_low = env.action_space.low
+    action_bound_high = env.action_space.high
+
+    agent = DDPGAgent(
+        observation_space, action_space, action_bound_low, action_bound_high
+    )
 
     best_score = env.reward_range[0]
     history = list()
 
     for i in range(N_GAMES):
         state, info = env.reset()
-        agent.action_noise.reset()
 
         term, trunc, score = False, False, 0
         while not term and not trunc:
             action = agent.choose_action(state)
             next_state, reward, term, trunc, info = env.step(action)
-            # done = True if term or trunc else False
 
             agent.store_transition(state, action, reward, next_state, term or trunc)
             agent.learn()
@@ -35,9 +40,9 @@ if __name__ == "__main__":
         history.append(score)
         avg_score = np.mean(history[-100:])
 
-        if avg_score > best_score:
-            best_score = avg_score
-            agent.save_checkpoints(i + 1, score)
+        if score > best_score:
+            best_score = score
+            agent.save_checkpoints()
 
         print(
             f"[Episode {i + 1:04}/{N_GAMES}]\tScore = {score:.4f}\tAverage = {avg_score:4f}",
