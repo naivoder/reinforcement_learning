@@ -42,7 +42,7 @@ def train_agent(env, agent, episodes=10000):
             agent.store_transition(state, action_index, reward, next_state, done)
             state = next_state
 
-            agent.learn()
+        agent.learn()
 
         total_score = env.get_total_score()
         scores_per_episode.append(total_score)
@@ -65,19 +65,19 @@ if __name__ == "__main__":
     num_actions = 44
 
     agent = DuelingDDQNAgent(
-        gamma=0.99,
+        gamma=0.95,
         epsilon=1.0,
         lr=1e-3,
         action_space_shape=action_space_shape,
         input_dims=state_shape,
-        batch_size=256,
+        batch_size=64,
         eps_min=0.1,
-        eps_dec=1e-5,
+        eps_dec=1e-6,
         replace=1000,
         chkpt_dir="weights/ddqn",
     )
 
-    rewards, scores = train_agent(env, agent, episodes=10000000)
+    rewards, scores = train_agent(env, agent, episodes=100000000)
     env.close()
 
     plot_running_average(rewards, window=1000, metric="Rewards")
