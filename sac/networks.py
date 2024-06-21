@@ -46,7 +46,7 @@ class CriticNetwork(torch.nn.Module):
         h1_size,
         h2_size,
         learning_rate=3e-4,
-        chkpt_path="weights/value.pt",
+        chkpt_path="weights/critic.pt",
     ):
         super(CriticNetwork, self).__init__()
         self.h1_size = h1_size
@@ -86,7 +86,7 @@ class ActorNetwork(torch.nn.Module):
         max_action,
         learning_rate=3e-4,
         reparam_noise=1e-6,
-        chkpt_path="weights/value.pt",
+        chkpt_path="weights/actor.pt",
     ):
         super(ActorNetwork, self).__init__()
         self.h1_size = h1_size
