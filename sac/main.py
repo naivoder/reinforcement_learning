@@ -27,15 +27,15 @@ agent = SACAgent(
 
 scores = []
 for i in range(N_GAMES):
-    state, _ = env.reset()
+    state = env.reset()
 
     term, trunc, score = False, False, 0
     while not term and not trunc:
         action = agent.choose_action(state)
-        next_state, reward, term, trunc, _ = env.step(action)
+        next_state, reward, done, _ = env.step(action)
         score += reward
 
-        agent.store_transition(state, action, reward, next_state, term or trunc)
+        agent.store_transition(state, action, reward, next_state, done)
         agent.learn()
 
         state = next_state
