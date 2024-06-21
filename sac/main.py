@@ -2,21 +2,10 @@ import gymnasium as gym
 import utils
 from agent import SACAgent
 import numpy as np
-from collections import UserDict
-import gym.envs.registration
-
-# Do this before importing pybullet_envs
-# (adds an extra property env_specs as a property to the registry,
-# so it looks like the <0.26 envspec version)
-registry = UserDict(gym.envs.registration.registry)
-registry.env_specs = gym.envs.registration.registry
-gym.envs.registration.registry = registry
-
-import pybullet_envs
 
 N_GAMES = 250
 
-env = gym.make("InvertedPendulumBulletEnv-v0")
+env = gym.make("InvertedPendulum-v4")
 agent = SACAgent(
     env.observation_space.shape,
     env.action_space,
@@ -27,15 +16,15 @@ agent = SACAgent(
 
 scores = []
 for i in range(N_GAMES):
-    state = env.reset()
+    state, _ = env.reset()
 
     term, trunc, score = False, False, 0
     while not term and not trunc:
         action = agent.choose_action(state)
-        next_state, reward, done, _ = env.step(action)
+        next_state, reward, term, trunc, _ = env.step(action)
         score += reward
 
-        agent.store_transition(state, action, reward, next_state, done)
+        agent.store_transition(state, action, reward, next_state, term or trunc)
         agent.learn()
 
         state = next_state
