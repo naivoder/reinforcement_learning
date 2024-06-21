@@ -11,7 +11,7 @@ class SACAgent(torch.nn.Module):
         action_space,
         tau=5e-3,
         reward_scale=2,
-        batch_size=100,
+        batch_size=256,
         lr=3e-4,
         gamma=0.99,
         h1_size=256,
@@ -76,12 +76,14 @@ class SACAgent(torch.nn.Module):
             chkpt_path="weights/actor.pt",
         )
 
-        self.update_network_params()
+        self.update_network_params(tau=1)
 
     def choose_action(self, state):
+        self.Actor.eval()
         state = torch.tensor(np.array(state)).to(torch.float32).to(self.Actor.device)
         action, _ = self.Actor.sample_normal(state)
-        return action.cpu().detach().numpy()[0]
+        self.Actor.train()
+        return action.cpu().detach().numpy()
 
     def store_transition(self, state, action, reward, next_state, done):
         self.memory.store_transition(state, action, reward, next_state, done)
@@ -93,10 +95,11 @@ class SACAgent(torch.nn.Module):
         states, actions, rewards, next_states, done = self.memory.sample(
             self.batch_size
         )
-        states = torch.tensor(states).to(self.Actor.device)
-        actions = torch.tensor(actions).to(self.Actor.device)
-        rewards = torch.tensor(rewards).to(self.Actor.device)
-        done = torch.tensor(done).to(self.Actor.device).to(torch.bool)
+        states = torch.tensor(states).to(torch.float32).to(self.Actor.device)
+        next_states = torch.tensor(next_states).to(torch.float32).to(self.Actor.device)
+        actions = torch.tensor(actions).to(torch.float32).to(self.Actor.device)
+        rewards = torch.tensor(rewards).to(torch.float32).to(self.Actor.device)
+        done = torch.tensor(done).to(torch.bool).to(self.Actor.device)
 
         self._value_loss(states)
         self._actor_loss(states)
@@ -110,7 +113,7 @@ class SACAgent(torch.nn.Module):
         q2 = self.Q2(states, actions).view(-1)
 
         # calculate q_hat term i.e. scaled discounted returns
-        q_hat = self.alpha * rewards + self.gamma * (next_state_values)
+        q_hat = self.reward_scale * rewards + self.gamma * (next_state_values)
 
         # calculate critic loss
         self.Q1.optimizer.zero_grad()
@@ -133,25 +136,25 @@ class SACAgent(torch.nn.Module):
         q1 = self.Q1(states, current_policy)
         q2 = self.Q2(states, current_policy)
         critic_value = torch.min(q1, q2).view(-1)
-        value_targets = critic_value - log_probs
 
         # calculate value loss
         self.V.optimizer.zero_grad()
+        value_targets = critic_value - log_probs
         value_loss = 0.5 * torch.nn.functional.mse_loss(values, value_targets)
         value_loss.backward(retain_graph=True)  # avoid coupling between loss functions
         self.V.optimizer.step()
 
     def _actor_loss(self, states):
         # get min critic value of states with new policy (reparameterized)
-        new_policy, log_probs = self.Actor.sample_normal(states, reparam=True)
+        new_policy, log_probs = self.Actor.sample_normal(states)
         log_probs = log_probs.view(-1)
         q1 = self.Q1(states, new_policy)
         q2 = self.Q2(states, new_policy)
         critic_value = torch.min(q1, q2).view(-1)
 
         # calculate actor loss
-        self.Actor.optimizer.zero_grad()
         actor_loss = torch.mean(log_probs - critic_value)
+        self.Actor.optimizer.zero_grad()
         actor_loss.backward(retain_graph=True)
         self.Actor.optimizer.step()
 
@@ -168,14 +171,14 @@ class SACAgent(torch.nn.Module):
             )
         self.V_target.load_state_dict(value_params)
 
-    def save_model(self):
+    def save_checkpoints(self):
         self.V.save_checkpoint()
         self.V_target.save_checkpoint()
         self.Q1.save_checkpoint()
         self.Q2.save_checkpoint()
         self.Actor.save_checkpoint()
 
-    def load_model(self):
+    def load_checkpoints(self):
         self.V.load_checkpoint()
         self.V_target.load_checkpoint()
         self.Q1.load_checkpoint()

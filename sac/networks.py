@@ -32,10 +32,10 @@ class ValueNetwork(torch.nn.Module):
         return self.V(x)
 
     def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_file)
+        torch.save(self.state_dict(), self.checkpoint_path)
 
     def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_file))
+        self.load_state_dict(torch.load(self.checkpoint_path))
 
 
 class CriticNetwork(torch.nn.Module):
@@ -70,10 +70,10 @@ class CriticNetwork(torch.nn.Module):
         return self.Q(x)
 
     def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_file)
+        torch.save(self.state_dict(), self.checkpoint_path)
 
     def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_file))
+        self.load_state_dict(torch.load(self.checkpoint_path))
 
 
 class ActorNetwork(torch.nn.Module):
@@ -84,7 +84,7 @@ class ActorNetwork(torch.nn.Module):
         h1_size,
         h2_size,
         max_action,
-        learning_rate=3e-4,
+        learning_rate=3e-5,
         reparam_noise=1e-6,
         chkpt_path="weights/actor.pt",
     ):
@@ -117,20 +117,21 @@ class ActorNetwork(torch.nn.Module):
     def sample_normal(self, state, reparam=False):
         # could also experiment with multivariate normal
         mu, sigma = self.forward(state)
+        # print(state, mu)
         action_probs = torch.distributions.Normal(mu, sigma)
         actions = action_probs.rsample() if reparam else action_probs.sample()
         action = torch.tanh(actions) * torch.tensor(self.max_action).to(self.device)
 
-        log_probs = action_probs.log_prob(actions)
         # add reparam noise since squared action can = 1 (can't take log of 0)
+        log_probs = action_probs.log_prob(actions)
         log_probs -= torch.log(1 - action.pow(2) + self.reparam_noise)
-        log_probs = log_probs.sum(0, keepdim=True)
+        log_probs = log_probs.sum(-1, keepdim=True)
 
         # for deterministic policy return mu instead of action
         return action, log_probs
 
     def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_file)
+        torch.save(self.state_dict(), self.checkpoint_path)
 
     def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_file))
+        self.load_state_dict(torch.load(self.checkpoint_path))
