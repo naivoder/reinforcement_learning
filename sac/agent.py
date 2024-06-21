@@ -79,7 +79,7 @@ class SACAgent(torch.nn.Module):
         self.update_network_params()
 
     def choose_action(self, state):
-        state = torch.tensor(np.array(state), torch.float32).to(self.actor.device)
+        state = torch.tensor(np.array(state)).to(torch.float32).to(self.Actor.device)
         action, _ = self.Actor.sample_normal(state)
         return action.cpu().detach().numpy()[0]
 
