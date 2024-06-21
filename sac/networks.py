@@ -124,7 +124,7 @@ class ActorNetwork(torch.nn.Module):
         log_probs = action_probs.log_prob(actions)
         # add reparam noise since squared action can = 1 (can't take log of 0)
         log_probs -= torch.log(1 - action.pow(2) + self.reparam_noise)
-        log_probs = log_probs.sum(1, keepdim=True)
+        log_probs = log_probs.sum(0, keepdim=True)
 
         # for deterministic policy return mu instead of action
         return action, log_probs
