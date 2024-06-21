@@ -9,7 +9,7 @@ class SACAgent(torch.nn.Module):
         self,
         input_dims,
         action_space,
-        tau=0.9,
+        tau=5e-3,
         reward_scale=2,
         batch_size=100,
         lr=3e-4,
