@@ -4,23 +4,29 @@ import networks
 import memory
 
 
-class Agent(torch.nn.Module):
+class SACAgent(torch.nn.Module):
     def __init__(
         self,
         input_dims,
-        n_actions,
-        tau,
-        alpha,
+        action_space,
+        tau=0.9,
+        reward_scale=2,
+        batch_size=100,
+        lr=3e-4,
         gamma=0.99,
-        h1_size=400,
-        h2_size=300,
+        h1_size=256,
+        h2_size=256,
         mem_size=int(1e6),
     ):
-        super(Agent, self).__init__()
+        super(SACAgent, self).__init__()
         self.input_dims = input_dims
-        self.n_actions = n_actions
+        self.n_actions = action_space.shape[0]
+        self.min_action = action_space.low
+        self.max_action = action_space.high
+        self.batch_size = batch_size
+        self.reward_scale = reward_scale
         self.tau = tau
-        self.alpha = alpha
+        self.lr = lr
         self.gamma = gamma
         self.h1_size = h1_size
         self.h2_size = h2_size
@@ -35,6 +41,7 @@ class Agent(torch.nn.Module):
             self.n_actions,
             self.h1_size,
             self.h2_size,
+            learning_rate=self.lr,
             chkpt_path="weights/critic_1.pt",
         )
         self.Q2 = networks.CriticNetwork(
@@ -42,29 +49,111 @@ class Agent(torch.nn.Module):
             self.n_actions,
             self.h1_size,
             self.h2_size,
+            learning_rate=self.lr,
             chkpt_path="weights/critic_2.pt",
         )
         self.V = networks.ValueNetwork(
-            self.input_dims, self.h1_size, self.h2_size, chkpt_path="weights/value.pt"
+            self.input_dims,
+            self.h1_size,
+            self.h2_size,
+            learning_rate=self.lr,
+            chkpt_path="weights/value.pt",
         )
         self.V_target = networks.ValueNetwork(
             self.input_dims,
             self.h1_size,
             self.h2_size,
+            learning_rate=self.lr,
             chkpt_path="weights/value_target.pt",
         )
         self.Actor = networks.ActorNetwork(
-            self.input_dims, self.n_actions, self.h1_size, self.h2_size, max_action=None
+            self.input_dims,
+            self.n_actions,
+            self.h1_size,
+            self.h2_size,
+            learning_rate=self.lr,
+            max_action=self.max_action,
+            chkpt_path="weights/actor.pt",
         )
 
         self.update_network_params()
 
     def choose_action(self, state):
-        state = torch.tensor(state, torch.float32)
-        return self.Actor(state)
+        state = torch.tensor(np.array(state), torch.float32).to(self.actor.device)
+        action, _ = self.Actor.sample_normal(state)
+        return action.cpu().detach().numpy()[0]
 
     def store_transition(self, state, action, reward, next_state, done):
         self.memory.store_transition(state, action, reward, next_state, done)
+
+    def learn(self):
+        if self.memory.mem_counter < self.batch_size:
+            return
+
+        states, actions, rewards, next_states, done = self.memory.sample(
+            self.batch_size
+        )
+        states = torch.tensor(states).to(self.Actor.device)
+        actions = torch.tensor(actions).to(self.Actor.device)
+        rewards = torch.tensor(rewards).to(self.Actor.device)
+        done = torch.tensor(done).to(self.Actor.device).to(torch.bool)
+
+        self._value_loss(states)
+        self._actor_loss(states)
+
+        # get value of next state according to target network
+        next_state_values = self.V_target(next_states).view(-1)
+        next_state_values[done] = 0.0
+
+        # get critic values of states with old policy (from memory)
+        q1 = self.Q1(states, actions).view(-1)
+        q2 = self.Q2(states, actions).view(-1)
+
+        # calculate q_hat term i.e. scaled discounted returns
+        q_hat = self.alpha * rewards + self.gamma * (next_state_values)
+
+        # calculate critic loss
+        self.Q1.optimizer.zero_grad()
+        self.Q2.optimizer.zero_grad()
+        q1_loss = 0.5 * torch.nn.functional.mse_loss(q1, q_hat)
+        q2_loss = 0.5 * torch.nn.functional.mse_loss(q2, q_hat)
+        critic_loss = q1_loss + q2_loss
+        critic_loss.backward()
+        self.Q1.optimizer.step()
+        self.Q2.optimizer.step()
+
+        self.update_network_params()
+
+    def _value_loss(self, states):
+        values = self.V(states).view(-1)
+
+        # get min critic value of states with current policy
+        current_policy, log_probs = self.Actor.sample_normal(states)
+        log_probs = log_probs.view(-1)
+        q1 = self.Q1(states, current_policy)
+        q2 = self.Q2(states, current_policy)
+        critic_value = torch.min(q1, q2).view(-1)
+        value_targets = critic_value - log_probs
+
+        # calculate value loss
+        self.V.optimizer.zero_grad()
+        value_loss = 0.5 * torch.nn.functional.mse_loss(values, value_targets)
+        value_loss.backward(retain_graph=True)  # avoid coupling between loss functions
+        self.V.optimizer.step()
+
+    def _actor_loss(self, states):
+        # get min critic value of states with new policy (reparameterized)
+        new_policy, log_probs = self.Actor.sample_normal(states, reparam=True)
+        log_probs = log_probs.view(-1)
+        q1 = self.Q1(states, new_policy)
+        q2 = self.Q2(states, new_policy)
+        critic_value = torch.min(q1, q2).view(-1)
+
+        # calculate actor loss
+        self.Actor.optimizer.zero_grad()
+        actor_loss = torch.mean(log_probs - critic_value)
+        actor_loss.backward(retain_graph=True)
+        self.Actor.optimizer.step()
 
     def update_network_params(self, tau=None):
         if tau is None:
