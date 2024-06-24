@@ -2,7 +2,7 @@ import torch
 from networks import Actor, Critic
 from memory import ReplayBuffer
 import numpy as np
-import tqdm
+from tqdm import tqdm
 
 
 class DiscretePPOAgent(torch.nn.Module):
@@ -10,6 +10,7 @@ class DiscretePPOAgent(torch.nn.Module):
         self,
         input_dims,
         n_actions,
+        alpha=3e-4,
         lamda=0.95,
         gamma=0.99,
         clip=0.2,
@@ -20,6 +21,7 @@ class DiscretePPOAgent(torch.nn.Module):
         super(DiscretePPOAgent, self).__init__()
         self.input_dims = input_dims
         self.n_actions = n_actions
+        self.alpha = alpha
         self.lamda = lamda
         self.gamma = gamma
         self.clip = clip
@@ -40,13 +42,12 @@ class DiscretePPOAgent(torch.nn.Module):
         probs = dist.log_prob(action)
 
         # to squeeze or not to squeeze, that is the question
-        return action, probs, value
+        return action.squeeze().item(), probs.squeeze().item(), value.squeeze().item()
 
     def learn(self):
         for _ in tqdm(range(self.epochs)):
-            (states, old_probs, actions, values, rewards, dones), batches = (
-                self.memory.sample()
-            )
+            states, old_probs, actions, values, rewards, dones = self.memory.sample()
+            batches = self.memory.generate_batches()
 
             advantage = np.zeros(len(rewards), dtype=np.float32)
 
@@ -54,7 +55,7 @@ class DiscretePPOAgent(torch.nn.Module):
                 at, discount = 0, 1
                 for j in range(i, len(rewards) - 1):
                     at += discount * (
-                        rewards[j] + self.gamma * values[j + 1] * (1 - int(dones[j]))
+                        rewards[j] + self.gamma * values[j + 1] * (1 - dones[j])
                     )
                     discount *= self.gamma * self.lamda
                 advantage[i] = at
@@ -63,15 +64,15 @@ class DiscretePPOAgent(torch.nn.Module):
             values = torch.tensor(values).to(self.actor.device)
 
             for batch in batches:
-                states = torch.FloatTensor(states[batch]).to(self.actor.device)
-                probs = torch.tensor(old_probs).to(self.actor.device)
-                actions = torch.tensor(actions).to(self.actor.device)
+                states_batch = torch.FloatTensor(states[batch]).to(self.actor.device)
+                old_probs_batch = torch.tensor(old_probs[batch]).to(self.actor.device)
+                actions_batch = torch.tensor(actions[batch]).to(self.actor.device)
 
-                dist = self.actor(states)
-                critic_value = self.critic(states)
+                dist = self.actor(states_batch)
+                critic_value = self.critic(states_batch)
 
-                new_probs = dist.log_prob(actions)
-                ratio = (new_probs - old_probs).exp()
+                new_probs = dist.log_prob(actions_batch)
+                ratio = (new_probs - old_probs_batch).exp()
 
                 weighted_probs = advantage[batch] * ratio
                 clipped_probs = (

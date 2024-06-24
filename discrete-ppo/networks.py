@@ -19,7 +19,7 @@ class Actor(torch.nn.Module):
         self.h2_size = h2_size
         self.chkpt_dir = chkpt_dir
 
-        self.h1_layer = torch.nn.Linear(*self.input_shape, self.h1_size)
+        self.h1_layer = torch.nn.Linear(*self.input_dims, self.h1_size)
         self.h2_layer = torch.nn.Linear(self.h1_size, self.h2_size)
         self.output = torch.nn.Linear(self.h2_size, self.n_actions)
 
@@ -35,10 +35,10 @@ class Actor(torch.nn.Module):
         return torch.distributions.Categorical(x)
 
     def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path)
+        torch.save(self.state_dict(), self.chkpt_dir)
 
     def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path))
+        self.load_state_dict(torch.load(self.chkpt_dir))
 
 
 class Critic(torch.nn.Module):
@@ -57,7 +57,7 @@ class Critic(torch.nn.Module):
         self.h2_size = h2_size
         self.chkpt_dir = chkpt_dir
 
-        self.h1_layer = torch.nn.Linear(*self.input_shape, self.h1_size)
+        self.h1_layer = torch.nn.Linear(*self.input_dims, self.h1_size)
         self.h2_layer = torch.nn.Linear(self.h1_size, self.h2_size)
         self.output = torch.nn.Linear(self.h2_size, 1)
 
@@ -72,7 +72,7 @@ class Critic(torch.nn.Module):
         return self.output(x)
 
     def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path)
+        torch.save(self.state_dict(), self.chkpt_dir)
 
     def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path))
+        self.load_state_dict(torch.load(self.chkpt_dir))

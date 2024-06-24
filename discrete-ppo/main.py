@@ -4,14 +4,14 @@ from utils import plot_running_avg
 import gymnasium as gym
 
 
-env = gym.make("Cartpole-v0")
+env = gym.make("CartPole-v1")
 
 agent = DiscretePPOAgent(
     env.observation_space.shape,
     env.action_space.n,
     alpha=3e-4,
-    epochs=10,
-    batch_size=64,
+    epochs=5,
+    batch_size=5,
 )
 
 STEPS = 20
