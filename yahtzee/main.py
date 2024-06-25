@@ -1,6 +1,6 @@
 import numpy as np
 from yahtzee import YahtzeeEnv
-from agent import DuelingDDQNAgent
+from ddqn import DuelingDDQNAgent
 import matplotlib.pyplot as plt
 
 
