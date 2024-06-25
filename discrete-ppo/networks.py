@@ -29,10 +29,9 @@ class Actor(torch.nn.Module):
         self.to(self.device)
 
     def forward(self, x):
-        x = torch.nn.functional.relu(self.h1_layer(x))
-        x = torch.nn.functional.relu(self.h2_layer(x))
-        x = torch.nn.functional.softmax(self.output(x), dim=-1)
-        return torch.distributions.Categorical(x)
+        x = torch.nn.functional.tanh(self.h1_layer(x))
+        x = torch.nn.functional.tanh(self.h2_layer(x))
+        return torch.distributions.Categorical(logits=self.output(x))
 
     def save_checkpoint(self):
         torch.save(self.state_dict(), self.chkpt_dir)
@@ -67,8 +66,8 @@ class Critic(torch.nn.Module):
         self.to(self.device)
 
     def forward(self, x):
-        x = torch.nn.functional.relu(self.h1_layer(x))
-        x = torch.nn.functional.relu(self.h2_layer(x))
+        x = torch.nn.functional.tanh(self.h1_layer(x))
+        x = torch.nn.functional.tanh(self.h2_layer(x))
         return self.output(x)
 
     def save_checkpoint(self):

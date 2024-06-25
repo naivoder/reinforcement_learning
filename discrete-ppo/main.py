@@ -10,12 +10,12 @@ agent = DiscretePPOAgent(
     env.observation_space.shape,
     env.action_space.n,
     alpha=3e-4,
-    epochs=5,
-    batch_size=5,
+    n_epochs=10,
+    batch_size=64,
 )
 
 STEPS = 20
-N_GAMES = 300
+N_GAMES = 25000
 
 n_steps, n_learn = 0, 0
 scores, best_score = [], env.reward_range[0]
@@ -24,12 +24,12 @@ for i in range(N_GAMES):
 
     term, trunc, score = False, False, 0
     while not term and not trunc:
-        action, prob, val = agent.choose_action(state)
+        action, prob = agent.choose_action(state)
 
         next_state, reward, term, trunc, _ = env.step(action)
         score += reward
 
-        agent.memory.store_transition(state, prob, val, action, reward, term or trunc)
+        agent.remember(state, next_state, action, prob, reward, term or trunc)
 
         n_steps += 1
         if n_steps % STEPS == 0:
@@ -43,7 +43,7 @@ for i in range(N_GAMES):
 
     if avg_score > best_score:
         best_score = avg_score
-        agent.save_checkpoints()
+        # agent.save_checkpoints()
 
     print(
         f"[Episode {i + 1:04}/{N_GAMES}]\tScore = {score:.4f}\tAverage = {avg_score:4f}",
