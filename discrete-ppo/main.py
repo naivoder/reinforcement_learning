@@ -4,7 +4,7 @@ from utils import plot_running_avg
 import gymnasium as gym
 
 
-env = gym.make("CartPole-v1")
+env = gym.make("LunarLander-v2")
 
 agent = DiscretePPOAgent(
     env.observation_space.shape,
@@ -14,7 +14,7 @@ agent = DiscretePPOAgent(
     batch_size=64,
 )
 
-STEPS = 20
+STEPS = 2048
 N_GAMES = 25000
 
 n_steps, n_learn = 0, 0
