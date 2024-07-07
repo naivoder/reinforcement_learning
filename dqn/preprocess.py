@@ -99,6 +99,7 @@ class AtariEnv:
         clip_rewards=False,
         no_ops=0,
         fire_first=False,
+        render=False,
     ):
         self.env = gym.make(env)
         self.env = RepeatActionAndMaxFrame(
@@ -106,6 +107,8 @@ class AtariEnv:
         )
         self.env = PreprocessFrame(self.env, shape)
         self.env = StackFrames(self.env, repeat)
+        if render:
+            self.env.render_mode = "rgb_array"
 
     def make(self):
         return self.env
