@@ -5,10 +5,13 @@ import cv2
 
 
 class RepeatActionAndMaxFrame(gym.Wrapper):
-    def __init__(self, env, repeat=4):
+    def __init__(self, env, repeat=4, clip_reward=False, no_ops=0, fire_first=False):
         super(RepeatActionAndMaxFrame, self).__init__(env)
         self.env = env
         self.repeat = repeat
+        self.clip_reward = clip_reward
+        self.no_ops = no_ops
+        self.fire_first = fire_first
         self.frame_buffer = np.zeros(
             (2, *self.env.observation_space.shape), dtype=np.float32
         )
@@ -19,8 +22,12 @@ class RepeatActionAndMaxFrame(gym.Wrapper):
 
         for i in range(self.repeat):
             state, reward, term, trunc, info = self.env.step(action)
+
+            if self.clip_reward:
+                reward = np.clip(reward, -1, 1)
+
             total_reward += reward
-            self.frame_buffer[i] = state
+            self.frame_buffer[i % 2] = state
 
             if term or trunc:
                 break
@@ -31,6 +38,17 @@ class RepeatActionAndMaxFrame(gym.Wrapper):
 
     def reset(self, seed=None, options=None):
         state, info = self.env.reset(seed=seed, options=options)
+
+        no_ops = np.random.randint(self.no_ops) + 1 if self.no_ops > 0 else 0
+        for _ in range(no_ops):
+            _, _, term, trunc, info = self.env.step(0)
+            if term or trunc:
+                _, _ = self.env.reset()
+
+        if self.fire_first:
+            assert self.env.unwrapped.get_action_meanings()[1] == "FIRE"
+            state, _, _, _, _ = self.env.step(1)
+
         self.frame_buffer = np.zeros(
             (2, *self.env.observation_space.shape), dtype=np.float32
         )
@@ -51,7 +69,7 @@ class PreprocessFrame(gym.ObservationWrapper):
         return state / 255.0
 
 
-class StackFrames(gym.Wrapper):
+class StackFrames(gym.ObservationWrapper):
     def __init__(self, env, size=4):
         super(StackFrames, self).__init__(env)
         self.size = int(size)
@@ -67,18 +85,27 @@ class StackFrames(gym.Wrapper):
         self.stack = deque([state] * self.size, maxlen=self.size)
         return np.array(self.stack), info
 
-    def step(self, action):
-        state, reward, term, trunc, info = self.env.step(action)
+    def observation(self, state):
         self.stack.append(state)
-        return np.array(self.stack), reward, term, trunc, info
+        return np.array(self.stack)
 
 
 class AtariEnv:
-    def __init__(self, env, shape=(84, 84), max_frame=2, size=4):
+    def __init__(
+        self,
+        env,
+        shape=(84, 84),
+        repeat=4,
+        clip_rewards=False,
+        no_ops=0,
+        fire_first=False,
+    ):
         self.env = gym.make(env)
-        self.env = RepeatActionAndMaxFrame(self.env, max_frame)
+        self.env = RepeatActionAndMaxFrame(
+            self.env, repeat, clip_rewards, no_ops, fire_first
+        )
         self.env = PreprocessFrame(self.env, shape)
-        self.env = StackFrames(self.env, size)
+        self.env = StackFrames(self.env, repeat)
 
     def make(self):
         return self.env

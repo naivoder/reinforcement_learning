@@ -20,5 +20,14 @@ class ReplayBuffer:
         self.done[i] = done
         self.mem_counter += 1
 
-    def generate_batches(self):
-        pass
+    def generate_batches(self, batch_size):
+        mem_max = min(self.mem_counter, self.buffer_size)
+        batch = np.random.choice(mem_max, batch_size, replace=False)
+
+        states = self.states[batch]
+        actions = self.actions[batch]
+        rewards = self.rewards[batch]
+        next_states = self.next_states[batch]
+        dones = self.dones[batch]
+
+        return states, actions, rewards, next_states, dones
