@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     env_name = "ALE/Pong-v5"
     save_name = env_name.split("/")[-1]
-    env = AtariEnv(env_name).make()
+    env = AtariEnv(env_name, clip_rewards=True).make()
 
     print(f"\nEnvironment: {save_name}")
     print(f"Obs.Space: {env.observation_space.shape} Act.Space: {env.action_space.n}")
