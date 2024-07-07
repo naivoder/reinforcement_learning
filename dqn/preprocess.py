@@ -5,7 +5,7 @@ import cv2
 
 
 class RepeatActionAndMaxFrame(gym.Wrapper):
-    def __init__(self, env, repeat=4, clip_reward=False, no_ops=0, fire_first=False):
+    def __init__(self, env, repeat=4, clip_reward=True, no_ops=0, fire_first=False):
         super(RepeatActionAndMaxFrame, self).__init__(env)
         self.env = env
         self.repeat = repeat
