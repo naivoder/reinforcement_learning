@@ -16,7 +16,7 @@ if __name__ == "__main__":
     env = AtariEnv(env_name).make()
 
     agent = DQNAgent(
-        env_name,
+        save_name,
         input_shape=env.observation_space.shape,
         n_actions=env.action_space.n,
         mem_size=1e5,
