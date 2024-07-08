@@ -79,7 +79,7 @@ class DDQNAgent:
         if np.random.random() > self.epsilon:
             state = torch.FloatTensor(state).unsqueeze(0).to(self.q1.device)
             actions = self.q1(state)
-            return torch.argmax(actions).item()
+            return torch.argmax(actions).cpu().numpy()
 
         return np.random.randint(0, self.n_actions)
 

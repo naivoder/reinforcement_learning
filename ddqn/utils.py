@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import sys
+import contextlib
 
 
 def plot_running_avg(scores):
@@ -12,3 +15,14 @@ def plot_running_avg(scores):
     plt.ylabel("Average Score")
     plt.grid(True)
     plt.show()
+
+
+@contextlib.contextmanager
+def suppress_stdout():
+    with open(os.devnull, "w") as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout

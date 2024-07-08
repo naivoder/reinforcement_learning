@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from collections import deque
 import cv2
+import utils
 
 
 class RepeatActionAndMaxFrame(gym.Wrapper):
@@ -100,12 +101,13 @@ class AtariEnv:
         no_ops=0,
         fire_first=False,
     ):
-        self.env = gym.make(env, render_mode="rgb_array")
-        self.env = RepeatActionAndMaxFrame(
-            self.env, repeat, clip_rewards, no_ops, fire_first
-        )
-        self.env = PreprocessFrame(self.env, shape)
-        self.env = StackFrames(self.env, repeat)
+        with utils.suppress_stdout():
+            self.env = gym.make(env, render_mode="rgb_array")
+            self.env = RepeatActionAndMaxFrame(
+                self.env, repeat, clip_rewards, no_ops, fire_first
+            )
+            self.env = PreprocessFrame(self.env, shape)
+            self.env = StackFrames(self.env, repeat)
 
     def make(self):
         return self.env
