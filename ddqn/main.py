@@ -57,13 +57,13 @@ if __name__ == "__main__":
                 next_states[j],
                 term[j] or trunc[j],
             )
-            agent.learn()
 
             score[j] += rewards[j]
             if term[j] or trunc[j]:
                 scores.append(score[j])
                 score[j] = 0
 
+        agent.learn()
         states = next_states
 
         if len(scores) > 0:
